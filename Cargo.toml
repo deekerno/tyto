@@ -1,0 +1,16 @@
+[package]
+name = "tyto"
+version = "0.1.0"
+authors = ["Alexander Decurnou <ad@alx.xyz>"]
+edition = "2018"
+
+[dependencies]
+actix-web = "*"
+bip_bencode = "*"
+bytes = "*"
+clap = "*"
+env_logger = "*"
+log = "*"
+raft-rs = "*"
+serde_derive = "*"
+url = "*"

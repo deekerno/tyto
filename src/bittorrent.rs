@@ -4,31 +4,30 @@
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-use bip_bencode::{BencodeRef, BRefAccess, BDecodeOpt};
+use bip_bencode::{BDecodeOpt, BRefAccess, BencodeRef};
 use bytes::{BufMut, BytesMut};
 use url::form_urlencoded;
 
 // These two peer types could probably be implemented more elegantly
 // with a trait, but there's only two types right now, so it's not a lot of work
 pub struct Peerv4 {
-    peer_id: String,    // This should be 20 bytes in length
+    peer_id: String, // This should be 20 bytes in length
     ip: Ipv4Addr,
     port: u16,
 }
 
 pub struct Peerv6 {
-    peer_id: String,    // This should be 20 bytes in length
+    peer_id: String, // This should be 20 bytes in length
     ip: Ipv6Addr,
     port: u16,
 }
 
 impl Peerv4 {
-    
     fn compact(&self) -> Vec<u8> {
         let mut ip: u32 = 0;
         let octets = self.ip.octets();
         let mut num_octets = (octets.len() - 1) as u32;
-        
+
         // Shift the octet by 3xN bits where N is the position
         // of the octet from the end of the address
         for x in octets.iter() {
@@ -48,15 +47,13 @@ impl Peerv4 {
     }
 }
 
-
 impl Peerv6 {
-    
     // BEP 07: IPv6 Tracker Extension
     fn compact(&self) -> Vec<u8> {
         let mut ip: u128 = 0;
         let octets = self.ip.octets();
         let mut num_octets = (octets.len() - 1) as u128;
-        
+
         // Same as peerv4, but each octet should be a hexadecimal number
         for x in octets.iter() {
             if (num_octets > 0) {
@@ -102,7 +99,7 @@ impl AnnounceRequest {
         let request_kv_pairs = form_urlencoded::parse(url_string).into_owned();
 
         let mut info_hash: String = "".to_string();
-        let mut peer: String  = "".to_string();
+        let mut peer: String = "".to_string();
         let mut port = 0;
         let mut uploaded = 0;
         let mut downloaded = 0;
@@ -113,64 +110,49 @@ impl AnnounceRequest {
 
         for (key, value) in request_kv_pairs {
             match key.as_str() {
-                "info_hash" => { info_hash = value },
-                "peer" => { peer = value },
-                "port" => {
-                    match value.parse::<u16>() {
-                        Ok(n) => { port = n }
-                        _ => { return Err("Unable to parse port") },
-                    }
+                "info_hash" => info_hash = value,
+                "peer" => peer = value,
+                "port" => match value.parse::<u16>() {
+                    Ok(n) => port = n,
+                    _ => return Err("Unable to parse port"),
                 },
-                "uploaded" => {
-                    match value.parse::<u32>() {
-                        Ok(n) => { uploaded = n }
-                        _ => { return Err("Unable to parse uploaded quantity") },
-                    }
+                "uploaded" => match value.parse::<u32>() {
+                    Ok(n) => uploaded = n,
+                    _ => return Err("Unable to parse uploaded quantity"),
                 },
-                "downloaded" => {
-                    match value.parse::<u32>() {
-                        Ok(n) => { downloaded = n }
-                        _ => { return Err("Unable to parse downloaded quantity") },
-                    }
+                "downloaded" => match value.parse::<u32>() {
+                    Ok(n) => downloaded = n,
+                    _ => return Err("Unable to parse downloaded quantity"),
                 },
-                "left" => {
-                    match value.parse::<u32>() {
-                        Ok(n) => { left = n }
-                        _ => { return Err("Unable to parse remaining quantity") },
-                    }
+                "left" => match value.parse::<u32>() {
+                    Ok(n) => left = n,
+                    _ => return Err("Unable to parse remaining quantity"),
                 },
-                "compact" => {
-                    match value.parse::<u32>() {
-                        Ok(n) => { compact = n != 0 }
-                        _ => { return Err("Unable to parse compact value as boolean") },
-                    }
+                "compact" => match value.parse::<u32>() {
+                    Ok(n) => compact = n != 0,
+                    _ => return Err("Unable to parse compact value as boolean"),
                 },
-                "no_peer_id" => {
-                    match value.parse::<u32>() {
-                        Ok(n) => { no_peer_id = n != 0 }
-                        _ => { return Err("Unable to parse no_peer_id as boolean") },
-                    }
+                "no_peer_id" => match value.parse::<u32>() {
+                    Ok(n) => no_peer_id = n != 0,
+                    _ => return Err("Unable to parse no_peer_id as boolean"),
                 },
-                "event" => { event = string_to_event(value) },
-                _ => {},
+                "event" => event = string_to_event(value),
+                _ => {}
             }
         }
 
-        Ok(
-            AnnounceRequest {
-                info_hash,
-                peer,
-                port,
-                uploaded,
-                downloaded,
-                left,
-                compact,
-                no_peer_id,
-                event,
-            }
-        )
+        Ok(AnnounceRequest {
+            info_hash,
+            peer,
+            port,
+            uploaded,
+            downloaded,
+            left,
+            compact,
+            no_peer_id,
+            event,
+        })
     }
-
 }
 
 // Peer types are functionally the same, but due to different
@@ -187,34 +169,39 @@ pub struct AnnounceResponse {
 }
 
 impl AnnounceResponse {
-    pub fn new(interval: u32, complete: u32, incomplete: u32, peers: Vec<Peerv4>, peers6: Vec<Peerv6>) -> Result<AnnounceResponse, &'static str> {
-        Ok(
-            AnnounceResponse {
-                failure_reason: "".to_string(),
-                interval,
-                tracker_id: "".to_string(),
-                complete,
-                incomplete,
-                peers,
-                peers6,
-            }
-        )
+    pub fn new(
+        interval: u32,
+        complete: u32,
+        incomplete: u32,
+        peers: Vec<Peerv4>,
+        peers6: Vec<Peerv6>,
+    ) -> Result<AnnounceResponse, &'static str> {
+        Ok(AnnounceResponse {
+            failure_reason: "".to_string(),
+            interval,
+            tracker_id: "".to_string(),
+            complete,
+            incomplete,
+            peers,
+            peers6,
+        })
     }
 
     // If a failure reason is present, no other keys should be defined
     pub fn fail(failure_reason: String) -> AnnounceResponse {
-        AnnounceResponse { failure_reason, ..Default::default() }
+        AnnounceResponse {
+            failure_reason,
+            ..Default::default()
+        }
     }
 
     //pub fn bencode(&self, compact: bool) -> &str {
     //}
 }
 
-pub struct ScrapeRequest {
-}
+pub struct ScrapeRequest {}
 
-impl ScrapeRequest {
-}
+impl ScrapeRequest {}
 
 fn string_to_event(s: String) -> Event {
     match s.as_ref() {
@@ -223,7 +210,6 @@ fn string_to_event(s: String) -> Event {
         "completed" => Event::Completed,
         "" => Event::None,
         _ => Event::None,
-
         // MAYBE:
         // This should probably return an error such as "Error:
         // Malformed Request" along with the PeerID of the client,
@@ -235,30 +221,39 @@ fn string_to_event(s: String) -> Event {
 mod tests {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-    use super::{AnnounceResponse, AnnounceRequest, Peerv4, Peerv6};
     use super::Event;
+    use super::{AnnounceRequest, AnnounceResponse, Peerv4, Peerv6};
 
-    use bytes::{BufMut, BytesMut};
     use crate::bittorrent::string_to_event;
+    use bytes::{BufMut, BytesMut};
 
     #[test]
     fn announce_good_request_creation() {
         let url_string = "http://tracker/announce?\
-        info_hash=%9A%813%3C%1B%16%E4%A8%3C%10%F3%05%2C%15%90%AA%DF%5E.%20\
-        &peer_id=ABCDEFGHIJKLMNOPQRST&port=6881&uploaded=0&downloaded=0\
-        &left=727955456&event=started&numwant=100&no_peer_id=1&compact=1".as_bytes();
+                          info_hash=%9A%813%3C%1B%16%E4%A8%3C%10%F3%05%2C%15%90%AA%DF%5E.%20\
+                          &peer_id=ABCDEFGHIJKLMNOPQRST&port=6881&uploaded=0&downloaded=0\
+                          &left=727955456&event=started&numwant=100&no_peer_id=1&compact=1"
+            .as_bytes();
 
-        assert!(AnnounceRequest::new(url_string).is_ok(), "Announce request creation failed");
+        assert!(
+            AnnounceRequest::new(url_string).is_ok(),
+            "Announce request creation failed"
+        );
     }
 
     #[test]
     fn announce_bad_request_creation() {
-        let url_string = "http://tracker/announce?\
-        info_hash=%9A%813%3C%1B%16%E4%A8%3C%10%F3%05%2C%15%90%AA%DF%5E.%20\
-        &peer_id=ABCDEFGHIJKLMNOPQRST&port=thisisnotanumber&uploaded=0&downloaded=0\
-        &left=727955456&event=started&numwant=100&no_peer_id=1&compact=thisisnotanumber".as_bytes();
+        let url_string =
+            "http://tracker/announce?\
+             info_hash=%9A%813%3C%1B%16%E4%A8%3C%10%F3%05%2C%15%90%AA%DF%5E.%20\
+             &peer_id=ABCDEFGHIJKLMNOPQRST&port=thisisnotanumber&uploaded=0&downloaded=0\
+             &left=727955456&event=started&numwant=100&no_peer_id=1&compact=thisisnotanumber"
+                .as_bytes();
 
-        assert!(AnnounceRequest::new(url_string).is_err(), "Incorrect announce request parameter parsing");
+        assert!(
+            AnnounceRequest::new(url_string).is_err(),
+            "Incorrect announce request parameter parsing"
+        );
     }
 
     #[test]
@@ -277,7 +272,10 @@ mod tests {
     fn response_failure_return() {
         let failure_reason = "It's not you...no, it's just you".to_string();
         let response = AnnounceResponse::fail(failure_reason);
-        assert_eq!(response.failure_reason, "It's not you...no, it's just you".to_string());
+        assert_eq!(
+            response.failure_reason,
+            "It's not you...no, it's just you".to_string()
+        );
     }
 
     #[test]
@@ -296,12 +294,14 @@ mod tests {
 
         assert_eq!(compact_rep_byte_string, localhost_port_byte_string.to_vec());
     }
-    
+
     #[test]
     fn peerv6_compact_transform() {
         let peer = Peerv6 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
-            ip: Ipv6Addr::new(0x2001, 0x0db8, 0x85a3, 0x0000, 0x0000, 0x8a2e, 0x0370, 0x7334),
+            ip: Ipv6Addr::new(
+                0x2001, 0x0db8, 0x85a3, 0x0000, 0x0000, 0x8a2e, 0x0370, 0x7334,
+            ),
             port: 6681,
         };
 

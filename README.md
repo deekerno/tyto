@@ -4,6 +4,11 @@
 <h1 align="center">Tyto</h1><br>
 </p>
 
+<div align="center">
+    <a href="https://travis-ci.com/adcrn/tyto"><img
+    src="https://travis-ci.com/adcrn/tyto.svg?token=9jG6XKKRPepsyqdsCqW7&branch=master"
+    alt="Travis-CI"></a>
+</div>
 *Disclaimer:* This software must only be used in accordance with the laws of your respective country.
 
 _Tyto_ is an open source BitTorrent tracker written in [Rust](https://www.rust-lang.org). It aims to be safe, performant, and distributed.

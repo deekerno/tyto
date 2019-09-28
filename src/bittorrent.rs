@@ -6,7 +6,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use bip_bencode::{BDecodeOpt, BRefAccess, BencodeRef};
 use bytes::{BufMut, BytesMut};
-use url::form_urlencoded;
+use url::{form_urlencoded, Url};
 
 // These two peer types could probably be implemented more elegantly
 // with a trait, but there's only two types right now, so it's not a lot of work
@@ -95,8 +95,11 @@ pub struct AnnounceRequest {
 }
 
 impl AnnounceRequest {
-    pub fn new(url_string: &[u8]) -> Result<AnnounceRequest, &str> {
-        let request_kv_pairs = form_urlencoded::parse(url_string).into_owned();
+    pub fn new(url_string: &str) -> Result<AnnounceRequest, &str> {
+        // Get rid of these unwraps later
+        let url = Url::parse(url_string).unwrap();
+        let query = url.query().unwrap();
+        let request_kv_pairs = form_urlencoded::parse(query.as_bytes()).into_owned();
 
         let mut info_hash: String = "".to_string();
         let mut peer: String = "".to_string();
@@ -199,9 +202,27 @@ impl AnnounceResponse {
     //}
 }
 
-pub struct ScrapeRequest {}
+pub struct ScrapeRequest {
+    info_hashes: Vec<String>,
+}
 
-impl ScrapeRequest {}
+impl ScrapeRequest {
+    pub fn new(url_string: &str) -> Result<ScrapeRequest, &str> {
+        let url = Url::parse(url_string).unwrap();
+        let query = url.query().unwrap();
+        let request_kv_pairs = form_urlencoded::parse(query.as_bytes()).into_owned();
+        let mut info_hashes = Vec::new();
+
+        for (key, value) in request_kv_pairs {
+            match key.as_str() {
+                "info_hash" => info_hashes.push(value),
+                _ => { return Err("Malformed scrape request") }
+            }
+        }
+
+        Ok(ScrapeRequest { info_hashes })
+    }
+}
 
 fn string_to_event(s: String) -> Event {
     match s.as_ref() {
@@ -222,7 +243,7 @@ mod tests {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     use super::Event;
-    use super::{AnnounceRequest, AnnounceResponse, Peerv4, Peerv6};
+    use super::{AnnounceRequest, AnnounceResponse, Peerv4, Peerv6, ScrapeRequest};
 
     use crate::bittorrent::string_to_event;
     use bytes::{BufMut, BytesMut};
@@ -232,8 +253,7 @@ mod tests {
         let url_string = "http://tracker/announce?\
                           info_hash=%9A%813%3C%1B%16%E4%A8%3C%10%F3%05%2C%15%90%AA%DF%5E.%20\
                           &peer_id=ABCDEFGHIJKLMNOPQRST&port=6881&uploaded=0&downloaded=0\
-                          &left=727955456&event=started&numwant=100&no_peer_id=1&compact=1"
-            .as_bytes();
+                          &left=727955456&event=started&numwant=100&no_peer_id=1&compact=1";
 
         assert!(
             AnnounceRequest::new(url_string).is_ok(),
@@ -247,8 +267,7 @@ mod tests {
             "http://tracker/announce?\
              info_hash=%9A%813%3C%1B%16%E4%A8%3C%10%F3%05%2C%15%90%AA%DF%5E.%20\
              &peer_id=ABCDEFGHIJKLMNOPQRST&port=thisisnotanumber&uploaded=0&downloaded=0\
-             &left=727955456&event=started&numwant=100&no_peer_id=1&compact=thisisnotanumber"
-                .as_bytes();
+             &left=727955456&event=started&numwant=100&no_peer_id=1&compact=thisisnotanumber";
 
         assert!(
             AnnounceRequest::new(url_string).is_err(),
@@ -314,5 +333,26 @@ mod tests {
         let compact_rep_byte_string = peer.compact();
 
         assert_eq!(compact_rep_byte_string, localhost_port_byte_string.to_vec());
+    }
+
+    #[test]
+    fn scrape_good_request_creation() {
+        let url_string = "http://example.com/scrape.php?info_hash=aaaaaaaaaaaaaaaaaaaa&info_hash=bbbbbbbbbbbbbbbbbbbb&info_hash=cccccccccccccccccccc";
+        
+        assert!(ScrapeRequest::new(url_string).is_ok(), "Scrape request creation failed");
+    }
+
+    #[test]
+    fn scrape_good_request_multiple_hashes() {
+        let url_string = "http://example.com/scrape.php?info_hash=aaaaaaaaaaaaaaaaaaaa&info_hash=bbbbbbbbbbbbbbbbbbbb&info_hash=cccccccccccccccccccc";
+        let scrape = ScrapeRequest::new(url_string).unwrap();
+        assert_eq!(scrape.info_hashes, vec!["aaaaaaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbbbbb", "cccccccccccccccccccc"]);
+    }
+
+    #[test]
+    fn scrape_bad_request_creation() {
+        let url_string = "http://example.com/scrape.php?info_hash=aaaaaaaaaaaaaaaaaaaa&info_bash=bbbbbbbbbbbbbbbbbbbb&info_slash=cccccccccccccccccccc";
+        
+        assert!(ScrapeRequest::new(url_string).is_err(), "Incorrect scrape request parsing");
     }
 }

@@ -1,7 +1,7 @@
 <p align="center">
     <img alt="Tyto" title="Tyto" src="https://i.imgur.com/D9Lq6K2.png"
     width="150">
-<h1 align="center">Tyto</h1><br>
+<h1 align="center">Tyto</h1>
 </p>
 
 <div align="center">

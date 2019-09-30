@@ -1,4 +1,5 @@
 pub mod bittorrent;
+pub mod util;
 
 use actix_web::{web, App, HttpResponse};
 use clap::{App as ClapApp, Arg};

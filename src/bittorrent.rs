@@ -4,9 +4,10 @@
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-use bip_bencode::{BDecodeOpt, BRefAccess, BencodeRef};
 use bytes::{BufMut, BytesMut};
 use url::{form_urlencoded, Url};
+
+use crate::util::{string_to_event, Event};
 
 // These two peer types could probably be implemented more elegantly
 // with a trait, but there's only two types right now, so it's not a lot of work
@@ -72,14 +73,6 @@ impl Peerv6 {
 
         full_compact_peer
     }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum Event {
-    Started,
-    Stopped,
-    Completed,
-    None,
 }
 
 pub struct AnnounceRequest {
@@ -243,31 +236,17 @@ impl ScrapeResponse {
     }
 }
 
-fn string_to_event(s: String) -> Event {
-    match s.as_ref() {
-        "started" => Event::Started,
-        "stopped" => Event::Stopped,
-        "completed" => Event::Completed,
-        "" => Event::None,
-        _ => Event::None,
-        // MAYBE:
-        // This should probably return an error such as "Error:
-        // Malformed Request" along with the PeerID of the client,
-        // and ignore the request from the client.
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-    use super::Event;
+    //use super::Event;
     use super::{
         AnnounceRequest, AnnounceResponse, Peerv4, Peerv6, ScrapeFile, ScrapeRequest,
         ScrapeResponse,
     };
 
-    use crate::bittorrent::string_to_event;
+    //use crate::bittorrent::string_to_event;
     use bytes::{BufMut, BytesMut};
 
     #[test]
@@ -295,18 +274,6 @@ mod tests {
             AnnounceRequest::new(url_string).is_err(),
             "Incorrect announce request parameter parsing"
         );
-    }
-
-    #[test]
-    fn event_good_value_parse() {
-        let s = "started".to_string();
-        assert_eq!(string_to_event(s), Event::Started);
-    }
-
-    #[test]
-    fn event_garbage_value_to_none() {
-        let s = "garbage".to_string();
-        assert_eq!(string_to_event(s), Event::None);
     }
 
     #[test]

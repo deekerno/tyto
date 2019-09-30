@@ -197,9 +197,14 @@ impl AnnounceResponse {
             ..Default::default()
         }
     }
+}
 
-    //pub fn bencode(&self, compact: bool) -> &str {
-    //}
+#[derive(Debug, Default)]
+pub struct ScrapeFile {
+    pub complete: u32,
+    pub downloaded: u32,
+    pub incomplete: u32,
+    pub name: String,
 }
 
 pub struct ScrapeRequest {
@@ -216,11 +221,25 @@ impl ScrapeRequest {
         for (key, value) in request_kv_pairs {
             match key.as_str() {
                 "info_hash" => info_hashes.push(value),
-                _ => { return Err("Malformed scrape request") }
+                _ => return Err("Malformed scrape request"),
             }
         }
 
         Ok(ScrapeRequest { info_hashes })
+    }
+}
+
+pub struct ScrapeResponse {
+    pub files: Vec<ScrapeFile>,
+}
+
+impl ScrapeResponse {
+    pub fn new() -> Result<ScrapeResponse, ()> {
+        Ok(ScrapeResponse { files: vec![] })
+    }
+
+    pub fn add_file(&mut self, scrape_file: ScrapeFile) {
+        self.files.push(scrape_file);
     }
 }
 
@@ -243,7 +262,10 @@ mod tests {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     use super::Event;
-    use super::{AnnounceRequest, AnnounceResponse, Peerv4, Peerv6, ScrapeRequest};
+    use super::{
+        AnnounceRequest, AnnounceResponse, Peerv4, Peerv6, ScrapeFile, ScrapeRequest,
+        ScrapeResponse,
+    };
 
     use crate::bittorrent::string_to_event;
     use bytes::{BufMut, BytesMut};
@@ -338,21 +360,43 @@ mod tests {
     #[test]
     fn scrape_good_request_creation() {
         let url_string = "http://example.com/scrape.php?info_hash=aaaaaaaaaaaaaaaaaaaa&info_hash=bbbbbbbbbbbbbbbbbbbb&info_hash=cccccccccccccccccccc";
-        
-        assert!(ScrapeRequest::new(url_string).is_ok(), "Scrape request creation failed");
+
+        assert!(
+            ScrapeRequest::new(url_string).is_ok(),
+            "Scrape request creation failed"
+        );
     }
 
     #[test]
     fn scrape_good_request_multiple_hashes() {
         let url_string = "http://example.com/scrape.php?info_hash=aaaaaaaaaaaaaaaaaaaa&info_hash=bbbbbbbbbbbbbbbbbbbb&info_hash=cccccccccccccccccccc";
         let scrape = ScrapeRequest::new(url_string).unwrap();
-        assert_eq!(scrape.info_hashes, vec!["aaaaaaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbbbbb", "cccccccccccccccccccc"]);
+        assert_eq!(
+            scrape.info_hashes,
+            vec![
+                "aaaaaaaaaaaaaaaaaaaa",
+                "bbbbbbbbbbbbbbbbbbbb",
+                "cccccccccccccccccccc"
+            ]
+        );
     }
 
     #[test]
     fn scrape_bad_request_creation() {
         let url_string = "http://example.com/scrape.php?info_hash=aaaaaaaaaaaaaaaaaaaa&info_bash=bbbbbbbbbbbbbbbbbbbb&info_slash=cccccccccccccccccccc";
-        
-        assert!(ScrapeRequest::new(url_string).is_err(), "Incorrect scrape request parsing");
+
+        assert!(
+            ScrapeRequest::new(url_string).is_err(),
+            "Incorrect scrape request parsing"
+        );
+    }
+
+    #[test]
+    fn scrape_response_add_file() {
+        let file = ScrapeFile::default();
+        let mut scrape_response = ScrapeResponse::new().unwrap();
+        scrape_response.add_file(file);
+
+        assert_eq!(scrape_response.files.len(), 1);
     }
 }

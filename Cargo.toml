@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 actix-web = "*"
-bip_bencode = "*"
+bendy = "^0.2"
 bytes = "*"
 clap = "*"
 env_logger = "*"

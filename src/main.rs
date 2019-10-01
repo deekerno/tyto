@@ -1,3 +1,4 @@
+pub mod bencode;
 pub mod bittorrent;
 pub mod util;
 
@@ -6,9 +7,6 @@ use clap::{App as ClapApp, Arg};
 use env_logger;
 
 use bittorrent::{AnnounceRequest, ScrapeRequest};
-
-#[macro_use]
-extern crate bip_bencode;
 
 #[macro_use]
 extern crate log;

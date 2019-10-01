@@ -2,9 +2,10 @@
 // Most of the information is coming from the following link:
 // https://wiki.theory.org/index.php/BitTorrentSpecification
 
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::collections::HashMap;
+use std::net::{Ipv4Addr, Ipv6Addr};
 
-use bytes::{BufMut, BytesMut};
+use bytes::BufMut;
 use url::{form_urlencoded, Url};
 
 use crate::util::{string_to_event, Event};
@@ -12,58 +13,33 @@ use crate::util::{string_to_event, Event};
 // These two peer types could probably be implemented more elegantly
 // with a trait, but there's only two types right now, so it's not a lot of work
 pub struct Peerv4 {
-    peer_id: String, // This should be 20 bytes in length
-    ip: Ipv4Addr,
-    port: u16,
+    pub peer_id: String, // This should be 20 bytes in length
+    pub ip: Ipv4Addr,
+    pub port: u16,
 }
 
 pub struct Peerv6 {
-    peer_id: String, // This should be 20 bytes in length
-    ip: Ipv6Addr,
-    port: u16,
+    pub peer_id: String, // This should be 20 bytes in length
+    pub ip: Ipv6Addr,
+    pub port: u16,
 }
 
 impl Peerv4 {
-    fn compact(&self) -> Vec<u8> {
-        let mut ip: u32 = 0;
-        let octets = self.ip.octets();
-        let mut num_octets = (octets.len() - 1) as u32;
-
-        // Shift the octet by 3xN bits where N is the position
-        // of the octet from the end of the address
-        for x in octets.iter() {
-            if (num_octets > 0) {
-                ip += u32::from(*x) << (8 * num_octets);
-                num_octets -= 1;
-            } else {
-                ip += u32::from(*x);
-            }
-        }
+    pub fn compact(&self) -> Vec<u8> {
+        let ip: u32 = self.ip.into();
 
         let mut full_compact_peer = vec![];
-        full_compact_peer.put_u32_be(ip);
-        full_compact_peer.put_u16_be(self.port);
+        full_compact_peer.put_slice(&ip.to_be_bytes());
+        full_compact_peer.put_slice(&self.port.to_be_bytes());
 
         full_compact_peer
     }
 }
 
+// BEP 07: IPv6 Tracker Extension
 impl Peerv6 {
-    // BEP 07: IPv6 Tracker Extension
-    fn compact(&self) -> Vec<u8> {
-        let mut ip: u128 = 0;
-        let octets = self.ip.octets();
-        let mut num_octets = (octets.len() - 1) as u128;
-
-        // Same as peerv4, but each octet should be a hexadecimal number
-        for x in octets.iter() {
-            if (num_octets > 0) {
-                ip += u128::from(*x) << (8 * num_octets);
-                num_octets -= 1;
-            } else {
-                ip += u128::from(*x);
-            }
-        }
+    pub fn compact(&self) -> Vec<u8> {
+        let ip: u128 = self.ip.into();
 
         // Had some trouble getting i128 features to work with
         // vectors, so this is a workaround; slowdown should be minimal
@@ -155,13 +131,16 @@ impl AnnounceRequest {
 // byte lengths, they should be separated for client compatibility
 #[derive(Default)]
 pub struct AnnounceResponse {
-    pub failure_reason: String,
     pub interval: u32,
     pub tracker_id: String,
     pub complete: u32,
     pub incomplete: u32,
     pub peers: Vec<Peerv4>,
     pub peers6: Vec<Peerv6>,
+}
+
+pub struct AnnounceFailure {
+    pub failure_reason: String,
 }
 
 impl AnnounceResponse {
@@ -173,7 +152,6 @@ impl AnnounceResponse {
         peers6: Vec<Peerv6>,
     ) -> Result<AnnounceResponse, &'static str> {
         Ok(AnnounceResponse {
-            failure_reason: "".to_string(),
             interval,
             tracker_id: "".to_string(),
             complete,
@@ -183,12 +161,27 @@ impl AnnounceResponse {
         })
     }
 
-    // If a failure reason is present, no other keys should be defined
-    pub fn fail(failure_reason: String) -> AnnounceResponse {
-        AnnounceResponse {
-            failure_reason,
-            ..Default::default()
+    pub fn peersv4_as_compact(&self) -> Vec<u8> {
+        let mut compact_peers = Vec::new();
+        for peer in &self.peers {
+            compact_peers.push(peer.compact());
         }
+        compact_peers.concat()
+    }
+
+    pub fn peersv6_as_compact(&self) -> Vec<u8> {
+        let mut compact_peers = Vec::new();
+        for peer in &self.peers6 {
+            compact_peers.push(peer.compact());
+        }
+        compact_peers.concat()
+    }
+}
+
+impl AnnounceFailure {
+    // If a failure reason is present, no other keys should be defined
+    pub fn new(failure_reason: String) -> AnnounceFailure {
+        AnnounceFailure { failure_reason }
     }
 }
 
@@ -223,31 +216,31 @@ impl ScrapeRequest {
 }
 
 pub struct ScrapeResponse {
-    pub files: Vec<ScrapeFile>,
+    pub files: HashMap<String, ScrapeFile>,
 }
 
 impl ScrapeResponse {
     pub fn new() -> Result<ScrapeResponse, ()> {
-        Ok(ScrapeResponse { files: vec![] })
+        Ok(ScrapeResponse {
+            files: HashMap::new(),
+        })
     }
 
-    pub fn add_file(&mut self, scrape_file: ScrapeFile) {
-        self.files.push(scrape_file);
+    pub fn add_file(&mut self, info_hash: String, scrape_file: ScrapeFile) {
+        self.files.insert(info_hash, scrape_file);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+    use std::net::{Ipv4Addr, Ipv6Addr};
 
-    //use super::Event;
     use super::{
-        AnnounceRequest, AnnounceResponse, Peerv4, Peerv6, ScrapeFile, ScrapeRequest,
-        ScrapeResponse,
+        AnnounceFailure, AnnounceRequest, AnnounceResponse, Peerv4, Peerv6, ScrapeFile,
+        ScrapeRequest, ScrapeResponse,
     };
 
-    //use crate::bittorrent::string_to_event;
-    use bytes::{BufMut, BytesMut};
+    use bytes::BufMut;
 
     #[test]
     fn announce_good_request_creation() {
@@ -277,13 +270,54 @@ mod tests {
     }
 
     #[test]
-    fn response_failure_return() {
+    fn announce_failure_return() {
         let failure_reason = "It's not you...no, it's just you".to_string();
-        let response = AnnounceResponse::fail(failure_reason);
+        let response = AnnounceFailure::new(failure_reason);
         assert_eq!(
             response.failure_reason,
             "It's not you...no, it's just you".to_string()
         );
+    }
+
+    #[test]
+    fn announce_response_creation() {
+        let peerv4_1 = Peerv4 {
+            peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
+            ip: Ipv4Addr::LOCALHOST,
+            port: 6893,
+        };
+        let peerv4_2 = Peerv4 {
+            peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
+            ip: Ipv4Addr::BROADCAST,
+            port: 6894,
+        };
+
+        let mut peers = Vec::new();
+        peers.push(peerv4_1);
+        peers.push(peerv4_2);
+
+        let peerv6_1 = Peerv6 {
+            peer_id: "ABCDEFGHIJKLMNOPABCD".to_string(),
+            ip: Ipv6Addr::new(
+                0x2001, 0x0db8, 0x85a3, 0x0000, 0x0000, 0x8a2e, 0x0370, 0x7334,
+            ),
+            port: 6681,
+        };
+        let peerv6_2 = Peerv6 {
+            peer_id: "ABCDEFGHIJKLMNOPZZZZ".to_string(),
+            ip: Ipv6Addr::new(
+                0xfe80, 0x0000, 0x0000, 0x0000, 0x0202, 0xb3ff, 0xfe1e, 0x8329,
+            ),
+            port: 6699,
+        };
+
+        let mut peers6 = Vec::new();
+        peers6.push(peerv6_1);
+        peers6.push(peerv6_2);
+
+        let response = AnnounceResponse::new(60, 100, 23, peers, peers6);
+
+        assert!(response.is_ok(), "Incorrect announce response creation");
     }
 
     #[test]
@@ -362,7 +396,7 @@ mod tests {
     fn scrape_response_add_file() {
         let file = ScrapeFile::default();
         let mut scrape_response = ScrapeResponse::new().unwrap();
-        scrape_response.add_file(file);
+        scrape_response.add_file("test".to_string(), file);
 
         assert_eq!(scrape_response.files.len(), 1);
     }

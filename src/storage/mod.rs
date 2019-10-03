@@ -5,7 +5,6 @@ use parking_lot::*;
 
 use crate::bittorrent::{Peer, Peerv4, Peerv6};
 
-// todo: Need to do a generic Peer so that both peer types are passable
 pub trait PeerStorage {
     fn put_seeder(&self, info_hash: String, peer: Peer);
     fn remove_seeder(&self, info_hash: String, peer: Peer);
@@ -90,11 +89,8 @@ impl PeerStorage for PeerStore {
 
     fn remove_seeder(&self, info_hash: String, peer: Peer) {
         let mut store = self.records.write();
-        match store.get_mut(&info_hash) {
-            Some(sw) => {
-                sw.remove_seeder(peer);
-            }
-            None => {}
+        if let Some(sw) = store.get_mut(&info_hash) {
+            sw.remove_seeder(peer);
         }
     }
 
@@ -114,20 +110,149 @@ impl PeerStorage for PeerStore {
 
     fn remove_leecher(&self, info_hash: String, peer: Peer) {
         let mut store = self.records.write();
-        match store.get_mut(&info_hash) {
-            Some(sw) => {
-                sw.remove_leecher(peer);
-            }
-            None => {}
+        if let Some(sw) = store.get_mut(&info_hash) {
+            sw.remove_leecher(peer);
         }
     }
+
     fn promote_leecher(&self, info_hash: String, peer: Peer) {
         let mut store = self.records.write();
-        match store.get_mut(&info_hash) {
-            Some(sw) => {
-                sw.promote_leecher(peer);
-            }
-            None => {}
+        if let Some(sw) = store.get_mut(&info_hash) {
+            sw.promote_leecher(peer);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    
+    use std::net::{Ipv4Addr, Ipv6Addr};
+    use std::sync::Arc;
+
+    use hashbrown::{HashMap, HashSet};
+    use parking_lot::*;
+
+    use crate::bittorrent::{Peer, Peerv4, Peerv6};
+
+    use super::*;
+
+    #[test]
+    fn memory_peer_storage_put_seeder_new_swarm() {
+        let store = PeerStore::new().unwrap();
+        let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
+        let peer = Peer::V4(Peerv4 {
+            peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
+            ip: Ipv4Addr::LOCALHOST,
+            port: 6893,
+        });
+
+        store.put_seeder(info_hash.clone(), peer.clone());
+        assert_eq!(store.records.read().get(&info_hash).unwrap().seeders.contains(&peer), true);
+    }
+
+    #[test]
+    fn memory_peer_storage_put_seeder_prior_swarm() {
+        let store = PeerStore::new().unwrap();
+        let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
+        let peer1 = Peer::V4(Peerv4 {
+            peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
+            ip: Ipv4Addr::LOCALHOST,
+            port: 6893,
+        });
+
+        store.put_seeder(info_hash.clone(), peer1);
+
+        let peer2 = Peer::V4(Peerv4 {
+            peer_id: "TSRQPONMLKJIHGFEDCBA".to_string(),
+            ip: Ipv4Addr::LOCALHOST,
+            port: 6881,
+        });
+
+        store.put_seeder(info_hash.clone(), peer2.clone());
+        assert_eq!(store.records.read().get(&info_hash).unwrap().seeders.contains(&peer2), true);
+    }
+
+    #[test]
+    fn memory_peer_storage_put_leecher_new_swarm() {
+        let store = PeerStore::new().unwrap();
+        let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
+        let peer = Peer::V4(Peerv4 {
+            peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
+            ip: Ipv4Addr::LOCALHOST,
+            port: 6893,
+        });
+
+        store.put_leecher(info_hash.clone(), peer.clone());
+        assert_eq!(store.records.read().get(&info_hash).unwrap().leechers.contains(&peer), true);
+    }
+
+    #[test]
+    fn memory_peer_storage_put_leecher_prior_swarm() {
+        let store = PeerStore::new().unwrap();
+        let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
+        let peer1 = Peer::V4(Peerv4 {
+            peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
+            ip: Ipv4Addr::LOCALHOST,
+            port: 6893,
+        });
+
+        store.put_seeder(info_hash.clone(), peer1);
+
+        let peer2 = Peer::V4(Peerv4 {
+            peer_id: "TSRQPONMLKJIHGFEDCBA".to_string(),
+            ip: Ipv4Addr::LOCALHOST,
+            port: 6881,
+        });
+
+        store.put_leecher(info_hash.clone(), peer2.clone());
+        assert_eq!(store.records.read().get(&info_hash).unwrap().leechers.contains(&peer2), true);
+    }
+
+    #[test]
+    fn memory_peer_storage_remove_seeder() {
+        let store = PeerStore::new().unwrap();
+        let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
+        let peer = Peer::V4(Peerv4 {
+            peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
+            ip: Ipv4Addr::LOCALHOST,
+            port: 6893,
+        });
+
+        store.put_seeder(info_hash.clone(), peer.clone());
+
+        store.remove_seeder(info_hash.clone(), peer.clone());
+        assert_eq!(store.records.read().get(&info_hash).unwrap().seeders.contains(&peer), false);
+    }
+
+    #[test]
+    fn memory_peer_storage_remove_leecher() {
+        let store = PeerStore::new().unwrap();
+        let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
+        let peer = Peer::V4(Peerv4 {
+            peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
+            ip: Ipv4Addr::LOCALHOST,
+            port: 6893,
+        });
+
+        store.put_leecher(info_hash.clone(), peer.clone());
+
+        store.remove_leecher(info_hash.clone(), peer.clone());
+        assert_eq!(store.records.read().get(&info_hash).unwrap().leechers.contains(&peer), false);
+    }
+
+    #[test]
+    fn memory_peer_storage_promote_leecher() {
+        let store = PeerStore::new().unwrap();
+        let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
+        let peer = Peer::V4(Peerv4 {
+            peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
+            ip: Ipv4Addr::LOCALHOST,
+            port: 6893,
+        });
+
+        store.put_leecher(info_hash.clone(), peer.clone());
+        store.promote_leecher(info_hash.clone(), peer.clone());
+
+        assert_eq!(store.records.read().get(&info_hash).unwrap().seeders.contains(&peer), true);
     }
 }

@@ -16,14 +16,14 @@ trait Compact {
 
 // These two peer types could probably be implemented more elegantly
 // with a trait, but there's only two types right now, so it's not a lot of work
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub struct Peerv4 {
     pub peer_id: String, // This should be 20 bytes in length
     pub ip: Ipv4Addr,
     pub port: u16,
 }
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub struct Peerv6 {
     pub peer_id: String, // This should be 20 bytes in length
     pub ip: Ipv6Addr,
@@ -57,7 +57,7 @@ impl Compact for Peerv6 {
     }
 }
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Peer {
     V4(Peerv4),
     V6(Peerv6),

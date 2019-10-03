@@ -11,6 +11,11 @@ bytes = "*"
 clap = "*"
 env_logger = "*"
 log = "*"
+parking_lot = "*"
 raft-rs = "*"
 serde_derive = "*"
 url = "*"
+
+[dependencies.hashbrown]
+version = "*"
+features = ["serde", "rayon"]

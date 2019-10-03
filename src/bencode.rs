@@ -1,6 +1,5 @@
+use crate::bittorrent::{AnnounceResponse, ScrapeFile, ScrapeResponse};
 use bendy::encoding::{Error, SingleItemEncoder, ToBencode};
-
-use crate::bittorrent::{AnnounceFailure, AnnounceResponse, ScrapeFile, ScrapeResponse};
 
 impl ToBencode for ScrapeFile {
     const MAX_DEPTH: usize = 1;
@@ -11,21 +10,10 @@ impl ToBencode for ScrapeFile {
             e.emit_pair(b"complete", &self.complete)?;
             e.emit_pair(b"downloaded", &self.downloaded)?;
             e.emit_pair(b"incomplete", &self.incomplete)?;
-            e.emit_pair(b"name", &self.name)?;
 
-            Ok(())
-        })?;
-
-        Ok(())
-    }
-}
-
-impl ToBencode for AnnounceFailure {
-    const MAX_DEPTH: usize = 1;
-
-    fn encode(&self, encoder: SingleItemEncoder) -> Result<(), Error> {
-        encoder.emit_dict(|mut e| {
-            e.emit_pair(b"failure_reason", &self.failure_reason)?;
+            if let Some(name) = &self.name {
+                e.emit_pair(b"name", name)?;
+            }
 
             Ok(())
         })?;
@@ -38,16 +26,27 @@ impl ToBencode for AnnounceResponse {
     const MAX_DEPTH: usize = 5;
 
     fn encode(&self, encoder: SingleItemEncoder) -> Result<(), Error> {
-        encoder.emit_dict(|mut e| {
-            e.emit_pair(b"complete", &self.complete)?;
-            e.emit_pair(b"incomplete", &self.incomplete)?;
-            e.emit_pair(b"interval", &self.interval)?;
-            e.emit_pair(b"peers", &self.peersv4_as_compact())?;
-            e.emit_pair(b"peers6", &self.peersv6_as_compact())?;
-            e.emit_pair(b"tracker_id", &self.tracker_id)?;
+        match &self.failure_reason {
+            Some(reason) => {
+                encoder.emit_dict(|mut e| {
+                    e.emit_pair(b"failure_reason", reason)?;
 
-            Ok(())
-        })?;
+                    Ok(())
+                })?;
+            }
+            None => {
+                encoder.emit_dict(|mut e| {
+                    e.emit_pair(b"complete", &self.complete)?;
+                    e.emit_pair(b"incomplete", &self.incomplete)?;
+                    e.emit_pair(b"interval", &self.interval)?;
+                    e.emit_pair(b"peers", &self.peersv4_as_compact())?;
+                    e.emit_pair(b"peers6", &self.peersv6_as_compact())?;
+                    e.emit_pair(b"tracker_id", &self.tracker_id)?;
+
+                    Ok(())
+                })?;
+            }
+        }
 
         Ok(())
     }
@@ -71,10 +70,6 @@ pub fn encode_announce_response(response: AnnounceResponse) -> Vec<u8> {
     response.to_bencode().ok().unwrap()
 }
 
-pub fn encode_announce_failure(failure: AnnounceFailure) -> Vec<u8> {
-    failure.to_bencode().ok().unwrap()
-}
-
 pub fn encode_scrape_response(response: ScrapeResponse) -> Vec<u8> {
     response.to_bencode().unwrap()
 }
@@ -82,40 +77,40 @@ pub fn encode_scrape_response(response: ScrapeResponse) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bittorrent::{AnnounceResponse, Peerv4, Peerv6, ScrapeResponse};
+    use crate::bittorrent::{AnnounceResponse, Peer, Peerv4, Peerv6, ScrapeResponse};
     use std::net::{Ipv4Addr, Ipv6Addr};
 
     #[test]
     fn announce_response_encoding() {
-        let peerv4_1 = Peerv4 {
+        let peerv4_1 = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::LOCALHOST,
             port: 6893,
-        };
-        let peerv4_2 = Peerv4 {
+        });
+        let peerv4_2 = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::BROADCAST,
             port: 6894,
-        };
+        });
 
         let mut peers = Vec::new();
         peers.push(peerv4_1);
         peers.push(peerv4_2);
 
-        let peerv6_1 = Peerv6 {
+        let peerv6_1 = Peer::V6(Peerv6 {
             peer_id: "ABCDEFGHIJKLMNOPABCD".to_string(),
             ip: Ipv6Addr::new(
                 0x2001, 0x0db8, 0x85a3, 0x0000, 0x0000, 0x8a2e, 0x0370, 0x7334,
             ),
             port: 6681,
-        };
-        let peerv6_2 = Peerv6 {
+        });
+        let peerv6_2 = Peer::V6(Peerv6 {
             peer_id: "ABCDEFGHIJKLMNOPZZZZ".to_string(),
             ip: Ipv6Addr::new(
                 0xfe80, 0x0000, 0x0000, 0x0000, 0x0202, 0xb3ff, 0xfe1e, 0x8329,
             ),
             port: 6699,
-        };
+        });
 
         let mut peers6 = Vec::new();
         peers6.push(peerv6_1);
@@ -131,9 +126,9 @@ mod tests {
     #[test]
     fn announce_failure_encoding() {
         let failure_reason = "ouch".to_string();
-        let failure = AnnounceFailure::new(failure_reason);
+        let failure = AnnounceResponse::failure(failure_reason).unwrap();
 
-        let encoded = encode_announce_failure(failure);
+        let encoded = encode_announce_response(failure);
 
         assert_eq!(encoded.as_slice(), b"d14:failure_reason4:ouche");
     }
@@ -144,14 +139,14 @@ mod tests {
             complete: 1,
             downloaded: 2,
             incomplete: 3,
-            name: "test".to_string(),
+            name: Some("test".to_string()),
         };
 
         let file2 = ScrapeFile {
             complete: 4000,
             downloaded: 5678,
             incomplete: 785,
-            name: "Reflections".to_string(),
+            name: Some("Reflections".to_string()),
         };
 
         let mut scrape_response = ScrapeResponse::new().unwrap();

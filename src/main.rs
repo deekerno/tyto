@@ -1,5 +1,6 @@
 pub mod bencode;
 pub mod bittorrent;
+pub mod storage;
 pub mod util;
 
 use actix_web::{web, App, HttpResponse};

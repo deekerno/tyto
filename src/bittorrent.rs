@@ -10,22 +10,28 @@ use url::{form_urlencoded, Url};
 
 use crate::util::{string_to_event, Event};
 
+trait Compact {
+    fn compact(&self) -> Vec<u8>;
+}
+
 // These two peer types could probably be implemented more elegantly
 // with a trait, but there's only two types right now, so it's not a lot of work
+#[derive(Eq, PartialEq, Hash)]
 pub struct Peerv4 {
     pub peer_id: String, // This should be 20 bytes in length
     pub ip: Ipv4Addr,
     pub port: u16,
 }
 
+#[derive(Eq, PartialEq, Hash)]
 pub struct Peerv6 {
     pub peer_id: String, // This should be 20 bytes in length
     pub ip: Ipv6Addr,
     pub port: u16,
 }
 
-impl Peerv4 {
-    pub fn compact(&self) -> Vec<u8> {
+impl Compact for Peerv4 {
+    fn compact(&self) -> Vec<u8> {
         let ip: u32 = self.ip.into();
 
         let mut full_compact_peer = vec![];
@@ -37,8 +43,8 @@ impl Peerv4 {
 }
 
 // BEP 07: IPv6 Tracker Extension
-impl Peerv6 {
-    pub fn compact(&self) -> Vec<u8> {
+impl Compact for Peerv6 {
+    fn compact(&self) -> Vec<u8> {
         let ip: u128 = self.ip.into();
 
         // Had some trouble getting i128 features to work with
@@ -48,6 +54,21 @@ impl Peerv6 {
         full_compact_peer.put_slice(&self.port.to_be_bytes());
 
         full_compact_peer
+    }
+}
+
+#[derive(PartialEq, Eq, Hash)]
+pub enum Peer {
+    V4(Peerv4),
+    V6(Peerv6),
+}
+
+impl Compact for Peer {
+    fn compact(&self) -> Vec<u8> {
+        match self {
+            Peer::V4(p) => p.compact(),
+            Peer::V6(p) => p.compact(),
+        }
     }
 }
 
@@ -61,6 +82,9 @@ pub struct AnnounceRequest {
     pub compact: bool,
     pub no_peer_id: bool,
     pub event: Event,
+    pub numwant: Option<u32>,
+    pub key: Option<String>,
+    pub trackerid: Option<String>,
 }
 
 impl AnnounceRequest {
@@ -79,9 +103,12 @@ impl AnnounceRequest {
         let mut compact = false;
         let mut no_peer_id = false;
         let mut event = Event::None;
+        let mut numwant = None;
+        let mut key = None;
+        let mut trackerid = None;
 
-        for (key, value) in request_kv_pairs {
-            match key.as_str() {
+        for (k, value) in request_kv_pairs {
+            match k.as_str() {
                 "info_hash" => info_hash = value,
                 "peer" => peer = value,
                 "port" => match value.parse::<u16>() {
@@ -109,6 +136,12 @@ impl AnnounceRequest {
                     _ => return Err("Unable to parse no_peer_id as boolean"),
                 },
                 "event" => event = string_to_event(value),
+                "numwant" => match value.parse::<u32>() {
+                    Ok(n) => numwant = Some(n),
+                    _ => return Err("Unable to parse numwant"),
+                },
+                "key" => key = Some(value),
+                "trackerid" => trackerid = Some(value),
                 _ => {}
             }
         }
@@ -123,6 +156,9 @@ impl AnnounceRequest {
             compact,
             no_peer_id,
             event,
+            numwant,
+            key,
+            trackerid,
         })
     }
 }
@@ -131,16 +167,14 @@ impl AnnounceRequest {
 // byte lengths, they should be separated for client compatibility
 #[derive(Default)]
 pub struct AnnounceResponse {
+    pub failure_reason: Option<String>,
     pub interval: u32,
+    pub min_interval: Option<u32>,
     pub tracker_id: String,
     pub complete: u32,
     pub incomplete: u32,
-    pub peers: Vec<Peerv4>,
-    pub peers6: Vec<Peerv6>,
-}
-
-pub struct AnnounceFailure {
-    pub failure_reason: String,
+    pub peers: Vec<Peer>,
+    pub peers6: Vec<Peer>,
 }
 
 impl AnnounceResponse {
@@ -148,16 +182,25 @@ impl AnnounceResponse {
         interval: u32,
         complete: u32,
         incomplete: u32,
-        peers: Vec<Peerv4>,
-        peers6: Vec<Peerv6>,
+        peers: Vec<Peer>,
+        peers6: Vec<Peer>,
     ) -> Result<AnnounceResponse, &'static str> {
         Ok(AnnounceResponse {
+            failure_reason: None,
             interval,
+            min_interval: None,
             tracker_id: "".to_string(),
             complete,
             incomplete,
             peers,
             peers6,
+        })
+    }
+
+    pub fn failure(reason: String) -> Result<AnnounceResponse, &'static str> {
+        Ok(AnnounceResponse {
+            failure_reason: Some(reason),
+            ..Default::default()
         })
     }
 
@@ -178,19 +221,12 @@ impl AnnounceResponse {
     }
 }
 
-impl AnnounceFailure {
-    // If a failure reason is present, no other keys should be defined
-    pub fn new(failure_reason: String) -> AnnounceFailure {
-        AnnounceFailure { failure_reason }
-    }
-}
-
 #[derive(Debug, Default)]
 pub struct ScrapeFile {
     pub complete: u32,
     pub downloaded: u32,
     pub incomplete: u32,
-    pub name: String,
+    pub name: Option<String>,
 }
 
 pub struct ScrapeRequest {
@@ -236,7 +272,7 @@ mod tests {
     use std::net::{Ipv4Addr, Ipv6Addr};
 
     use super::{
-        AnnounceFailure, AnnounceRequest, AnnounceResponse, Peerv4, Peerv6, ScrapeFile,
+        AnnounceRequest, AnnounceResponse, Compact, Peer, Peerv4, Peerv6, ScrapeFile,
         ScrapeRequest, ScrapeResponse,
     };
 
@@ -272,44 +308,44 @@ mod tests {
     #[test]
     fn announce_failure_return() {
         let failure_reason = "It's not you...no, it's just you".to_string();
-        let response = AnnounceFailure::new(failure_reason);
+        let failure = AnnounceResponse::failure(failure_reason).unwrap();
         assert_eq!(
-            response.failure_reason,
-            "It's not you...no, it's just you".to_string()
+            failure.failure_reason,
+            Some("It's not you...no, it's just you".to_string())
         );
     }
 
     #[test]
     fn announce_response_creation() {
-        let peerv4_1 = Peerv4 {
+        let peerv4_1 = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::LOCALHOST,
             port: 6893,
-        };
-        let peerv4_2 = Peerv4 {
+        });
+        let peerv4_2 = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::BROADCAST,
             port: 6894,
-        };
+        });
 
         let mut peers = Vec::new();
         peers.push(peerv4_1);
         peers.push(peerv4_2);
 
-        let peerv6_1 = Peerv6 {
+        let peerv6_1 = Peer::V6(Peerv6 {
             peer_id: "ABCDEFGHIJKLMNOPABCD".to_string(),
             ip: Ipv6Addr::new(
                 0x2001, 0x0db8, 0x85a3, 0x0000, 0x0000, 0x8a2e, 0x0370, 0x7334,
             ),
             port: 6681,
-        };
-        let peerv6_2 = Peerv6 {
+        });
+        let peerv6_2 = Peer::V6(Peerv6 {
             peer_id: "ABCDEFGHIJKLMNOPZZZZ".to_string(),
             ip: Ipv6Addr::new(
                 0xfe80, 0x0000, 0x0000, 0x0000, 0x0202, 0xb3ff, 0xfe1e, 0x8329,
             ),
             port: 6699,
-        };
+        });
 
         let mut peers6 = Vec::new();
         peers6.push(peerv6_1);
@@ -322,11 +358,11 @@ mod tests {
 
     #[test]
     fn peerv4_compact_transform() {
-        let peer = Peerv4 {
+        let peer = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::LOCALHOST,
             port: 6681,
-        };
+        });
 
         let mut localhost_port_byte_string = vec![];
         localhost_port_byte_string.put_u32_be(2130706433); // localhost in decimal
@@ -339,13 +375,13 @@ mod tests {
 
     #[test]
     fn peerv6_compact_transform() {
-        let peer = Peerv6 {
+        let peer = Peer::V6(Peerv6 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv6Addr::new(
                 0x2001, 0x0db8, 0x85a3, 0x0000, 0x0000, 0x8a2e, 0x0370, 0x7334,
             ),
             port: 6681,
-        };
+        });
 
         let mut localhost_port_byte_string = vec![];
         let localhost_decimal = 42540766452641154071740215577757643572 as u128;

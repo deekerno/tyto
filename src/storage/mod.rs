@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use hashbrown::{HashMap, HashSet};
-use parking_lot::*;
+use parking_lot::RwLock;
 
 use crate::bittorrent::{Peer, Peerv4, Peerv6};
 
@@ -65,7 +65,7 @@ pub struct PeerStore {
 }
 
 impl PeerStore {
-    fn new() -> Result<PeerStore, &'static str> {
+    pub fn new() -> Result<PeerStore, &'static str> {
         Ok(PeerStore {
             records: Arc::new(RwLock::new(Records::new())),
         })
@@ -125,12 +125,8 @@ impl PeerStorage for PeerStore {
 
 #[cfg(test)]
 mod tests {
-    
-    use std::net::{Ipv4Addr, Ipv6Addr};
-    use std::sync::Arc;
 
-    use hashbrown::{HashMap, HashSet};
-    use parking_lot::*;
+    use std::net::{Ipv4Addr, Ipv6Addr};
 
     use crate::bittorrent::{Peer, Peerv4, Peerv6};
 
@@ -147,7 +143,16 @@ mod tests {
         });
 
         store.put_seeder(info_hash.clone(), peer.clone());
-        assert_eq!(store.records.read().get(&info_hash).unwrap().seeders.contains(&peer), true);
+        assert_eq!(
+            store
+                .records
+                .read()
+                .get(&info_hash)
+                .unwrap()
+                .seeders
+                .contains(&peer),
+            true
+        );
     }
 
     #[test]
@@ -169,7 +174,16 @@ mod tests {
         });
 
         store.put_seeder(info_hash.clone(), peer2.clone());
-        assert_eq!(store.records.read().get(&info_hash).unwrap().seeders.contains(&peer2), true);
+        assert_eq!(
+            store
+                .records
+                .read()
+                .get(&info_hash)
+                .unwrap()
+                .seeders
+                .contains(&peer2),
+            true
+        );
     }
 
     #[test]
@@ -183,7 +197,16 @@ mod tests {
         });
 
         store.put_leecher(info_hash.clone(), peer.clone());
-        assert_eq!(store.records.read().get(&info_hash).unwrap().leechers.contains(&peer), true);
+        assert_eq!(
+            store
+                .records
+                .read()
+                .get(&info_hash)
+                .unwrap()
+                .leechers
+                .contains(&peer),
+            true
+        );
     }
 
     #[test]
@@ -205,7 +228,16 @@ mod tests {
         });
 
         store.put_leecher(info_hash.clone(), peer2.clone());
-        assert_eq!(store.records.read().get(&info_hash).unwrap().leechers.contains(&peer2), true);
+        assert_eq!(
+            store
+                .records
+                .read()
+                .get(&info_hash)
+                .unwrap()
+                .leechers
+                .contains(&peer2),
+            true
+        );
     }
 
     #[test]
@@ -221,7 +253,16 @@ mod tests {
         store.put_seeder(info_hash.clone(), peer.clone());
 
         store.remove_seeder(info_hash.clone(), peer.clone());
-        assert_eq!(store.records.read().get(&info_hash).unwrap().seeders.contains(&peer), false);
+        assert_eq!(
+            store
+                .records
+                .read()
+                .get(&info_hash)
+                .unwrap()
+                .seeders
+                .contains(&peer),
+            false
+        );
     }
 
     #[test]
@@ -237,7 +278,16 @@ mod tests {
         store.put_leecher(info_hash.clone(), peer.clone());
 
         store.remove_leecher(info_hash.clone(), peer.clone());
-        assert_eq!(store.records.read().get(&info_hash).unwrap().leechers.contains(&peer), false);
+        assert_eq!(
+            store
+                .records
+                .read()
+                .get(&info_hash)
+                .unwrap()
+                .leechers
+                .contains(&peer),
+            false
+        );
     }
 
     #[test]
@@ -253,6 +303,15 @@ mod tests {
         store.put_leecher(info_hash.clone(), peer.clone());
         store.promote_leecher(info_hash.clone(), peer.clone());
 
-        assert_eq!(store.records.read().get(&info_hash).unwrap().seeders.contains(&peer), true);
+        assert_eq!(
+            store
+                .records
+                .read()
+                .get(&info_hash)
+                .unwrap()
+                .seeders
+                .contains(&peer),
+            true
+        );
     }
 }

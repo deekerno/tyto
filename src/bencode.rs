@@ -34,11 +34,17 @@ impl ToBencode for AnnounceResponse {
                     Ok(())
                 })?;
             }
+
             None => {
                 encoder.emit_dict(|mut e| {
                     e.emit_pair(b"complete", &self.complete)?;
                     e.emit_pair(b"incomplete", &self.incomplete)?;
                     e.emit_pair(b"interval", &self.interval)?;
+
+                    if let Some(min_interval) = &self.min_interval {
+                        e.emit_pair(b"min_interval", min_interval)?;
+                    }
+
                     e.emit_pair(b"peers", &self.peersv4_as_compact())?;
                     e.emit_pair(b"peers6", &self.peersv6_as_compact())?;
                     e.emit_pair(b"tracker_id", &self.tracker_id)?;
@@ -126,7 +132,7 @@ mod tests {
     #[test]
     fn announce_failure_encoding() {
         let failure_reason = "ouch".to_string();
-        let failure = AnnounceResponse::failure(failure_reason).unwrap();
+        let failure = AnnounceResponse::failure(failure_reason);
 
         let encoded = encode_announce_response(failure);
 

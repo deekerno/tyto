@@ -3,10 +3,12 @@
 // https://wiki.theory.org/index.php/BitTorrentSpecification
 
 use std::collections::HashMap;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use bytes::BufMut;
-use url::{form_urlencoded, Url};
+use hex;
+use percent_encoding;
+use url::form_urlencoded;
 
 use crate::util::{string_to_event, Event};
 
@@ -82,17 +84,18 @@ pub struct AnnounceRequest {
     pub compact: bool,
     pub no_peer_id: bool,
     pub event: Event,
+    pub ip: Option<IpAddr>,
     pub numwant: Option<u32>,
     pub key: Option<String>,
     pub trackerid: Option<String>,
 }
 
 impl AnnounceRequest {
-    pub fn new(url_string: &str) -> Result<AnnounceRequest, &str> {
-        // Get rid of these unwraps later
-        let url = Url::parse(url_string).unwrap();
-        let query = url.query().unwrap();
-        let request_kv_pairs = form_urlencoded::parse(query.as_bytes()).into_owned();
+    pub fn new(
+        url_string: &str,
+        req_ip: Option<&str>,
+    ) -> Result<AnnounceRequest, AnnounceResponse> {
+        let request_kv_pairs = form_urlencoded::parse(url_string.as_bytes()).into_owned();
 
         let mut info_hash: String = "".to_string();
         let mut peer: String = "".to_string();
@@ -103,46 +106,70 @@ impl AnnounceRequest {
         let mut compact = false;
         let mut no_peer_id = false;
         let mut event = Event::None;
+        let mut ip = None;
         let mut numwant = None;
         let mut key = None;
         let mut trackerid = None;
 
         for (k, value) in request_kv_pairs {
             match k.as_str() {
-                "info_hash" => info_hash = value,
+                "info_hash" => {
+                    match percent_encoding::percent_decode(value.as_bytes()).decode_utf8() {
+                        Ok(s) => info_hash = s.to_string(),
+                        _ => {
+                            return Err(AnnounceResponse::failure("Malformed request".to_string()))
+                        }
+                    }
+                }
                 "peer" => peer = value,
                 "port" => match value.parse::<u16>() {
                     Ok(n) => port = n,
-                    _ => return Err("Unable to parse port"),
+                    _ => return Err(AnnounceResponse::failure("Malformed request".to_string())),
                 },
                 "uploaded" => match value.parse::<u32>() {
                     Ok(n) => uploaded = n,
-                    _ => return Err("Unable to parse uploaded quantity"),
+                    _ => return Err(AnnounceResponse::failure("Malformed request".to_string())),
                 },
                 "downloaded" => match value.parse::<u32>() {
                     Ok(n) => downloaded = n,
-                    _ => return Err("Unable to parse downloaded quantity"),
+                    _ => return Err(AnnounceResponse::failure("Malformed request".to_string())),
                 },
                 "left" => match value.parse::<u32>() {
                     Ok(n) => left = n,
-                    _ => return Err("Unable to parse remaining quantity"),
+                    _ => return Err(AnnounceResponse::failure("Malformed request".to_string())),
                 },
                 "compact" => match value.parse::<u32>() {
                     Ok(n) => compact = n != 0,
-                    _ => return Err("Unable to parse compact value as boolean"),
+                    _ => return Err(AnnounceResponse::failure("Malformed request".to_string())),
                 },
                 "no_peer_id" => match value.parse::<u32>() {
                     Ok(n) => no_peer_id = n != 0,
-                    _ => return Err("Unable to parse no_peer_id as boolean"),
+                    _ => return Err(AnnounceResponse::failure("Malformed request".to_string())),
                 },
                 "event" => event = string_to_event(value),
+                "ip" => match value.parse::<IpAddr>() {
+                    Ok(addr) => ip = Some(addr),
+                    _ => return Err(AnnounceResponse::failure("Malformed request".to_string())),
+                },
                 "numwant" => match value.parse::<u32>() {
                     Ok(n) => numwant = Some(n),
-                    _ => return Err("Unable to parse numwant"),
+                    _ => return Err(AnnounceResponse::failure("Malformed request".to_string())),
                 },
                 "key" => key = Some(value),
                 "trackerid" => trackerid = Some(value),
                 _ => {}
+            }
+        }
+
+        // This should not be the default value
+        if info_hash == "" {
+            return Err(AnnounceResponse::failure("Malformed request".to_string()));
+        }
+
+        // Digusting unwrap sequence, but whatever.
+        if ip.is_none() {
+            if let Some(addr) = req_ip {
+                ip = Some(addr.parse().unwrap());
             }
         }
 
@@ -156,6 +183,7 @@ impl AnnounceRequest {
             compact,
             no_peer_id,
             event,
+            ip,
             numwant,
             key,
             trackerid,
@@ -197,11 +225,11 @@ impl AnnounceResponse {
         })
     }
 
-    pub fn failure(reason: String) -> Result<AnnounceResponse, &'static str> {
-        Ok(AnnounceResponse {
+    pub fn failure(reason: String) -> AnnounceResponse {
+        AnnounceResponse {
             failure_reason: Some(reason),
             ..Default::default()
-        })
+        }
     }
 
     pub fn peersv4_as_compact(&self) -> Vec<u8> {
@@ -235,9 +263,7 @@ pub struct ScrapeRequest {
 
 impl ScrapeRequest {
     pub fn new(url_string: &str) -> Result<ScrapeRequest, &str> {
-        let url = Url::parse(url_string).unwrap();
-        let query = url.query().unwrap();
-        let request_kv_pairs = form_urlencoded::parse(query.as_bytes()).into_owned();
+        let request_kv_pairs = form_urlencoded::parse(url_string.as_bytes()).into_owned();
         let mut info_hashes = Vec::new();
 
         for (key, value) in request_kv_pairs {
@@ -280,13 +306,12 @@ mod tests {
 
     #[test]
     fn announce_good_request_creation() {
-        let url_string = "http://tracker/announce?\
-                          info_hash=%9A%813%3C%1B%16%E4%A8%3C%10%F3%05%2C%15%90%AA%DF%5E.%20\
+        let url_string = "info_hash=%90%28%9F%D3M%FC%1C%F8%F3%16%A2h%AD%D85L%853DX\
                           &peer_id=ABCDEFGHIJKLMNOPQRST&port=6881&uploaded=0&downloaded=0\
                           &left=727955456&event=started&numwant=100&no_peer_id=1&compact=1";
 
         assert!(
-            AnnounceRequest::new(url_string).is_ok(),
+            AnnounceRequest::new(url_string, None).is_ok(),
             "Announce request creation failed"
         );
     }
@@ -294,13 +319,12 @@ mod tests {
     #[test]
     fn announce_bad_request_creation() {
         let url_string =
-            "http://tracker/announce?\
-             info_hash=%9A%813%3C%1B%16%E4%A8%3C%10%F3%05%2C%15%90%AA%DF%5E.%20\
+            "info_hash=%90%28%9F%D3M%FC%1C%F8%F3%16%A2h%AD%D85L%853DX\
              &peer_id=ABCDEFGHIJKLMNOPQRST&port=thisisnotanumber&uploaded=0&downloaded=0\
              &left=727955456&event=started&numwant=100&no_peer_id=1&compact=thisisnotanumber";
 
         assert!(
-            AnnounceRequest::new(url_string).is_err(),
+            AnnounceRequest::new(url_string, None).is_err(),
             "Incorrect announce request parameter parsing"
         );
     }
@@ -308,7 +332,7 @@ mod tests {
     #[test]
     fn announce_failure_return() {
         let failure_reason = "It's not you...no, it's just you".to_string();
-        let failure = AnnounceResponse::failure(failure_reason).unwrap();
+        let failure = AnnounceResponse::failure(failure_reason);
         assert_eq!(
             failure.failure_reason,
             Some("It's not you...no, it's just you".to_string())
@@ -396,7 +420,7 @@ mod tests {
 
     #[test]
     fn scrape_good_request_creation() {
-        let url_string = "http://example.com/scrape.php?info_hash=aaaaaaaaaaaaaaaaaaaa&info_hash=bbbbbbbbbbbbbbbbbbbb&info_hash=cccccccccccccccccccc";
+        let url_string = "info_hash=aaaaaaaaaaaaaaaaaaaa&info_hash=bbbbbbbbbbbbbbbbbbbb&info_hash=cccccccccccccccccccc";
 
         assert!(
             ScrapeRequest::new(url_string).is_ok(),
@@ -406,7 +430,7 @@ mod tests {
 
     #[test]
     fn scrape_good_request_multiple_hashes() {
-        let url_string = "http://example.com/scrape.php?info_hash=aaaaaaaaaaaaaaaaaaaa&info_hash=bbbbbbbbbbbbbbbbbbbb&info_hash=cccccccccccccccccccc";
+        let url_string = "info_hash=aaaaaaaaaaaaaaaaaaaa&info_hash=bbbbbbbbbbbbbbbbbbbb&info_hash=cccccccccccccccccccc";
         let scrape = ScrapeRequest::new(url_string).unwrap();
         assert_eq!(
             scrape.info_hashes,
@@ -420,7 +444,7 @@ mod tests {
 
     #[test]
     fn scrape_bad_request_creation() {
-        let url_string = "http://example.com/scrape.php?info_hash=aaaaaaaaaaaaaaaaaaaa&info_bash=bbbbbbbbbbbbbbbbbbbb&info_slash=cccccccccccccccccccc";
+        let url_string = "info_hash=aaaaaaaaaaaaaaaaaaaa&info_bash=bbbbbbbbbbbbbbbbbbbb&info_slash=cccccccccccccccccccc";
 
         assert!(
             ScrapeRequest::new(url_string).is_err(),

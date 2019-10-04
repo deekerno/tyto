@@ -1,26 +1,23 @@
 pub mod bencode;
 pub mod bittorrent;
+pub mod network;
 pub mod storage;
 pub mod util;
 
-use actix_web::{web, App, HttpResponse};
+use std::io;
+use std::sync::Arc;
+
+use actix_web::{guard, web, App, HttpRequest, HttpResponse, HttpServer};
 use clap::{App as ClapApp, Arg};
 use env_logger;
 
 use bittorrent::{AnnounceRequest, ScrapeRequest};
+use network::{parse_announce, parse_scrape};
 
 #[macro_use]
 extern crate log;
 
-fn parse_announce() {
-    //
-}
-
-fn parse_scrape() {
-    //
-}
-
-fn main() {
+fn main() -> io::Result<()> {
     env_logger::init();
 
     let matches = ClapApp::new("tyto")
@@ -39,7 +36,24 @@ fn main() {
 
     info!("Loading configuration...");
 
-    let app = App::new()
-        .route("/announce", web::get().to(parse_announce))
-        .route("/scrape", web::get().to(parse_scrape));
+    // Creates a data object to be shared between actor threads
+    let data = Arc::new(storage::PeerStore::new());
+
+    HttpServer::new(move || {
+        App::new()
+            .data(data.clone())
+            .service(
+                web::resource("/announce")
+                    .guard(guard::Header("content-type", "text/plain"))
+                    .route(web::get().to(parse_announce)),
+            )
+            .service(
+                web::resource("/scrape")
+                    .guard(guard::Header("content-type", "text/plain"))
+                    .route(web::get().to(parse_scrape)),
+            )
+            .default_service(web::route().to(HttpResponse::MethodNotAllowed))
+    })
+    .bind("127.0.0.1:8585")?
+    .run()
 }

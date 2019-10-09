@@ -2,8 +2,29 @@ use std::sync::Arc;
 
 use hashbrown::{HashMap, HashSet};
 use parking_lot::RwLock;
+use rand::seq::SliceRandom;
 
-use crate::bittorrent::{Peer, Peerv4, Peerv6};
+use crate::bittorrent::Peer;
+
+struct PeerList(Vec<Peer>);
+
+// Wasn't a huge fan of this, but couldn't do it using FromIterator
+impl PeerList {
+    fn new() -> PeerList {
+        PeerList(Vec::new())
+    }
+
+    fn add_from_swarm(&mut self, elems: &HashSet<Peer>) {
+        for peer in elems.clone().into_iter() {
+            self.0.push(peer);
+        }
+    }
+
+    fn give_random(&mut self, numwant: u32) -> Vec<Peer> {
+        let mut rng = &mut rand::thread_rng();
+        self.0.choose_multiple(&mut rng, numwant as usize).cloned().collect()
+    }
+}
 
 pub trait PeerStorage {
     fn put_seeder(&self, info_hash: String, peer: Peer);
@@ -11,6 +32,7 @@ pub trait PeerStorage {
     fn put_leecher(&self, info_hash: String, peer: Peer);
     fn remove_leecher(&self, info_hash: String, peer: Peer);
     fn promote_leecher(&self, info_hash: String, peer: Peer);
+    fn get_peers(&self, info_hash: String, numwant: u32) -> Vec<Peer>;
 }
 
 pub trait TorrentStorage {
@@ -120,6 +142,20 @@ impl PeerStorage for PeerStore {
         if let Some(sw) = store.get_mut(&info_hash) {
             sw.promote_leecher(peer);
         }
+    }
+
+    // Returns a randomized vector of peers to be returned to client
+    fn get_peers(&self, info_hash: String, numwant: u32) -> Vec<Peer> {
+        let mut peer_list = PeerList::new();
+        
+        let store = self.records.read();
+        if let Some(sw) = store.get(&info_hash) {
+            peer_list.add_from_swarm(&sw.seeders);
+            peer_list.add_from_swarm(&sw.leechers);
+        }
+
+        // Randomized bunch of seeders and leechers
+        peer_list.give_random(numwant)
     }
 }
 

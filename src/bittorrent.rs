@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use bytes::BufMut;
-use hex;
 use percent_encoding;
 use url::form_urlencoded;
 
@@ -153,7 +152,7 @@ impl AnnounceRequest {
                 },
                 "numwant" => match value.parse::<u32>() {
                     Ok(n) => numwant = Some(n),
-                    _ => return Err(AnnounceResponse::failure("Malformed request".to_string())),
+                    _ => numwant = Some(50),
                 },
                 "key" => key = Some(value),
                 "trackerid" => trackerid = Some(value),
@@ -201,8 +200,8 @@ pub struct AnnounceResponse {
     pub tracker_id: String,
     pub complete: u32,
     pub incomplete: u32,
-    pub peers: Vec<Peer>,
-    pub peers6: Vec<Peer>,
+    pub peers: Vec<Peerv4>,
+    pub peers6: Vec<Peerv6>,
 }
 
 impl AnnounceResponse {
@@ -210,8 +209,8 @@ impl AnnounceResponse {
         interval: u32,
         complete: u32,
         incomplete: u32,
-        peers: Vec<Peer>,
-        peers6: Vec<Peer>,
+        peers: Vec<Peerv4>,
+        peers6: Vec<Peerv6>,
     ) -> Result<AnnounceResponse, &'static str> {
         Ok(AnnounceResponse {
             failure_reason: None,
@@ -341,37 +340,37 @@ mod tests {
 
     #[test]
     fn announce_response_creation() {
-        let peerv4_1 = Peer::V4(Peerv4 {
+        let peerv4_1 = Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::LOCALHOST,
             port: 6893,
-        });
-        let peerv4_2 = Peer::V4(Peerv4 {
+        };
+        let peerv4_2 = Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::BROADCAST,
             port: 6894,
-        });
+        };
 
-        let mut peers = Vec::new();
+        let mut peers: Vec<Peerv4> = Vec::new();
         peers.push(peerv4_1);
         peers.push(peerv4_2);
 
-        let peerv6_1 = Peer::V6(Peerv6 {
+        let peerv6_1 = Peerv6 {
             peer_id: "ABCDEFGHIJKLMNOPABCD".to_string(),
             ip: Ipv6Addr::new(
                 0x2001, 0x0db8, 0x85a3, 0x0000, 0x0000, 0x8a2e, 0x0370, 0x7334,
             ),
             port: 6681,
-        });
-        let peerv6_2 = Peer::V6(Peerv6 {
+        };
+        let peerv6_2 = Peerv6 {
             peer_id: "ABCDEFGHIJKLMNOPZZZZ".to_string(),
             ip: Ipv6Addr::new(
                 0xfe80, 0x0000, 0x0000, 0x0000, 0x0202, 0xb3ff, 0xfe1e, 0x8329,
             ),
             port: 6699,
-        });
+        };
 
-        let mut peers6 = Vec::new();
+        let mut peers6: Vec<Peerv6> = Vec::new();
         peers6.push(peerv6_1);
         peers6.push(peerv6_2);
 

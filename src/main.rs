@@ -5,20 +5,20 @@ pub mod storage;
 pub mod util;
 
 use std::io;
-use std::sync::Arc;
 
-use actix_web::{guard, web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{guard, middleware, web, App, HttpResponse, HttpServer};
 use clap::{App as ClapApp, Arg};
-use env_logger;
-
-use bittorrent::{AnnounceRequest, ScrapeRequest};
-use network::{parse_announce, parse_scrape};
+use pretty_env_logger;
 
 #[macro_use]
 extern crate log;
 
 fn main() -> io::Result<()> {
-    env_logger::init();
+    
+    if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "actix_web=DEBUG");
+    }
+    pretty_env_logger::init_timed();
 
     let matches = ClapApp::new("tyto")
         .version("0.1")
@@ -36,21 +36,24 @@ fn main() -> io::Result<()> {
 
     info!("Loading configuration...");
 
-    // Creates a data object to be shared between actor threads
-    let data = Arc::new(storage::PeerStore::new());
 
     HttpServer::new(move || {
+
+        // Creates a data object to be shared between actor threads
+        let data = web::Data::new(storage::PeerStore::new().unwrap());
+
         App::new()
-            .data(data.clone())
+            .wrap(middleware::Logger::default())
+            .register_data(data.clone())
             .service(
-                web::resource("/announce")
+                web::resource("announce")
                     .guard(guard::Header("content-type", "text/plain"))
-                    .route(web::get().to(parse_announce)),
+                    .route(web::get().to(network::parse_announce)),
             )
             .service(
-                web::resource("/scrape")
+                web::resource("scrape")
                     .guard(guard::Header("content-type", "text/plain"))
-                    .route(web::get().to(parse_scrape)),
+                    .route(web::get().to(network::parse_scrape)),
             )
             .default_service(web::route().to(HttpResponse::MethodNotAllowed))
     })

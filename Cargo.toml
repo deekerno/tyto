@@ -9,6 +9,7 @@ actix-web = "*"
 bendy = "^0.2"
 bytes = "*"
 clap = "*"
+config = "0.9"
 env = "*"
 log = "*"
 parking_lot = "*"
@@ -16,7 +17,7 @@ percent-encoding = "*"
 pretty_env_logger = "*"
 raft-rs = "*"
 rand = "*"
-serde_derive = "*"
+serde = { version = "1.0", features = ["derive", "rc"] }
 url = "*"
 
 [dependencies.hashbrown]

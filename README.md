@@ -19,8 +19,7 @@ _Tyto_ is an open source BitTorrent tracker written in [Rust](https://www.rust-l
 Tyto was created to facilitate the distribution of (legal) media through the
 BitTorrent protocol. Many of the popular tracker software available has not
 been updated in more than a decade. Many aspects that were "nice-to-have" at
-the time, e.g. IPv6 support, multithreading, etc., have become quite necessary
-to operate at the scale at which modern deployments operate. Tyto implements
+the time, e.g. IPv6 support, multithreading, etc., have become quite necessary at the scale at which modern deployments operate. Tyto implements
 many of the newest official standards and de facto extensions in order to
 create a robust and performant distibution system that can be used to legally
 serve many swarms with minimal downtime.

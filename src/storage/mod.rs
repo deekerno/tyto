@@ -3,6 +3,7 @@ use std::sync::Arc;
 use hashbrown::{HashMap, HashSet};
 use parking_lot::RwLock;
 use rand::seq::SliceRandom;
+use serde::{Deserialize, Serialize};
 
 use crate::bittorrent::Peer;
 
@@ -22,7 +23,10 @@ impl PeerList {
 
     fn give_random(&mut self, numwant: u32) -> Vec<Peer> {
         let mut rng = &mut rand::thread_rng();
-        self.0.choose_multiple(&mut rng, numwant as usize).cloned().collect()
+        self.0
+            .choose_multiple(&mut rng, numwant as usize)
+            .cloned()
+            .collect()
     }
 }
 
@@ -36,9 +40,59 @@ pub trait PeerStorage {
 }
 
 pub trait TorrentStorage {
+    // This should retrieve all the torrents from whatever backing storage
+    // is being used to store torrent details, e.g. SQL.
     fn get_torrents(&self);
+
+    // This should flush all torrent details that are held in memory to the
+    // backing storage in use for production.
     fn flush_torrents(&self);
-    fn add_torrents(&self);
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Torrent {
+    pub info_hash: String,
+    pub complete: u32,   // Number of seeders
+    pub downloaded: u32, // Amount of Event::Complete as been received
+    pub incomplete: u32, // Number of leechers
+    pub balance: u32,    // Total traffic for this torrent
+}
+
+impl Torrent {
+    pub fn new(
+        info_hash: String,
+        complete: u32,
+        downloaded: u32,
+        incomplete: u32,
+        balance: u32,
+    ) -> Torrent {
+        Torrent {
+            info_hash,
+            complete,
+            downloaded,
+            incomplete,
+            balance,
+        }
+    }
+}
+
+type TorrentRecords = HashMap<String, Torrent>;
+
+pub struct TorrentStore {
+    pub torrents: Arc<RwLock<TorrentRecords>>,
+}
+
+impl TorrentStore {
+    pub fn new() -> Result<TorrentStore, &'static str> {
+        Ok(TorrentStore {
+            torrents: Arc::new(RwLock::new(TorrentRecords::new())),
+        })
+    }
+}
+
+impl TorrentStorage for TorrentStore {
+    fn get_torrents(&self) {}
+    fn flush_torrents(&self) {}
 }
 
 // Should these be byte strings instead of just peer types?
@@ -79,17 +133,17 @@ impl Swarm {
     }
 }
 
-type Records = HashMap<String, Swarm>;
+type PeerRecords = HashMap<String, Swarm>;
 
 // Sharable between threads, multiple readers, one writer
 pub struct PeerStore {
-    pub records: Arc<RwLock<Records>>,
+    pub records: Arc<RwLock<PeerRecords>>,
 }
 
 impl PeerStore {
     pub fn new() -> Result<PeerStore, &'static str> {
         Ok(PeerStore {
-            records: Arc::new(RwLock::new(Records::new())),
+            records: Arc::new(RwLock::new(PeerRecords::new())),
         })
     }
 }
@@ -147,7 +201,7 @@ impl PeerStorage for PeerStore {
     // Returns a randomized vector of peers to be returned to client
     fn get_peers(&self, info_hash: String, numwant: u32) -> Vec<Peer> {
         let mut peer_list = PeerList::new();
-        
+
         let store = self.records.read();
         if let Some(sw) = store.get(&info_hash) {
             peer_list.add_from_swarm(&sw.seeders);

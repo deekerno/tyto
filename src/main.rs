@@ -14,7 +14,6 @@ use pretty_env_logger;
 extern crate log;
 
 fn main() -> io::Result<()> {
-    
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", "actix_web=DEBUG");
     }
@@ -36,9 +35,7 @@ fn main() -> io::Result<()> {
 
     info!("Loading configuration...");
 
-
     HttpServer::new(move || {
-
         // Creates a data object to be shared between actor threads
         let data = web::Data::new(storage::PeerStore::new().unwrap());
 

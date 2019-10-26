@@ -38,7 +38,7 @@ serve many swarms with minimal downtime.
 ## Notes
 ### Fault-Tolerance
 A long term goal of the project is to enable high availability through
-distributed fault-tolerance. There are many unforseen that can take down a tracker
+distributed fault-tolerance. There are many unforseen events that can take down a tracker
 system, and spatial distribution of nodes running Tyto in a distributed fashion
 would allow for continued uptime as fixes are applied to unreachable nodes.
 

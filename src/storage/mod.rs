@@ -1,5 +1,8 @@
+use std::fs;
+use std::io::{BufReader, BufWriter};
 use std::sync::Arc;
 
+use bincode::{deserialize_from, serialize_into};
 use hashbrown::{HashMap, HashSet};
 use parking_lot::RwLock;
 use rand::seq::SliceRandom;
@@ -42,7 +45,7 @@ pub trait PeerStorage {
 pub trait TorrentStorage {
     // This should retrieve all the torrents from whatever backing storage
     // is being used to store torrent details, e.g. SQL.
-    fn get_torrents(&self);
+    fn get_torrents(&mut self);
 
     // This should flush all torrent details that are held in memory to the
     // backing storage in use for production.
@@ -78,21 +81,36 @@ impl Torrent {
 
 type TorrentRecords = HashMap<String, Torrent>;
 
-pub struct TorrentStore {
+pub struct TorrentMemoryStore {
     pub torrents: Arc<RwLock<TorrentRecords>>,
+    pub path: String,
 }
 
-impl TorrentStore {
-    pub fn new() -> Result<TorrentStore, &'static str> {
-        Ok(TorrentStore {
+impl TorrentMemoryStore {
+    pub fn new(path: String) -> Result<TorrentMemoryStore, &'static str> {
+        Ok(TorrentMemoryStore {
             torrents: Arc::new(RwLock::new(TorrentRecords::new())),
+            path,
         })
     }
 }
 
-impl TorrentStorage for TorrentStore {
-    fn get_torrents(&self) {}
-    fn flush_torrents(&self) {}
+// This is just a memory-backed implementation of a torrent storage solution;
+// production systems should probably use a more trustworthy solution, e.g. SQL
+impl TorrentStorage for TorrentMemoryStore {
+    
+    fn get_torrents(&mut self) {
+        let mut torrent_flat_file_reader = BufReader::new(fs::File::open(&self.path).expect("Could not open database file"));
+        let torrents = deserialize_from(&mut torrent_flat_file_reader).expect("Could not deserialize");
+        self.torrents = Arc::new(RwLock::new(torrents));
+    }
+    
+    fn flush_torrents(&self) {
+        let torrents = self.torrents.read();
+        let mut torrent_flat_file_writer = BufWriter::new(fs::File::create(&self.path).expect("Could not write to database path"));
+
+        serialize_into(&mut torrent_flat_file_writer, &*torrents).expect("Could not write database to file");
+    }
 }
 
 // Should these be byte strings instead of just peer types?

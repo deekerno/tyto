@@ -45,7 +45,7 @@ fn main() -> io::Result<()> {
             .service(
                 web::resource("announce")
                     .guard(guard::Header("content-type", "text/plain"))
-                    .route(web::get().to(network::parse_announce)),
+                    .route(web::get().to_async(network::parse_announce)),
             )
             .service(
                 web::resource("scrape")

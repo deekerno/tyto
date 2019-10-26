@@ -1,4 +1,5 @@
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::{web, Error, HttpRequest, HttpResponse};
+use futures::{future::ok as fut_ok, Future};
 
 use crate::bencode;
 use crate::bittorrent::{AnnounceRequest, AnnounceResponse, Peer, ScrapeRequest};
@@ -7,7 +8,7 @@ use crate::storage::{PeerStorage, PeerStore};
 // This will eventually be read from the configuration YAML.
 const INTERVAL: u32 = 60;
 
-pub fn parse_announce(data: web::Data<PeerStore>, req: HttpRequest) -> HttpResponse {
+pub fn parse_announce(data: web::Data<PeerStore>, req: HttpRequest) -> impl Future<Item = HttpResponse, Error = Error> {
     let announce_request = AnnounceRequest::new(req.query_string(), req.connection_info().remote());
 
     match announce_request {
@@ -29,18 +30,20 @@ pub fn parse_announce(data: web::Data<PeerStore>, req: HttpRequest) -> HttpRespo
             // Dummy values, the actuals will come from the torrent storage
             let response = AnnounceResponse::new(INTERVAL, 100, 23, peers, peers6);
             let bencoded = bencode::encode_announce_response(response.unwrap());
-            HttpResponse::Ok().content_type("text/plain").body(bencoded)
+            fut_ok(HttpResponse::Ok().content_type("text/plain").body(bencoded))
         }
 
         // If the request is not parse-able, short-circuit and respond with failure
         Err(failure) => {
             let bencoded = bencode::encode_announce_response(failure);
-            HttpResponse::Ok().content_type("text/plain").body(bencoded)
+            fut_ok(HttpResponse::Ok().content_type("text/plain").body(bencoded))
         }
     }
 }
 
-pub fn parse_scrape(data: web::Data<PeerStore>, req: HttpRequest) {
+pub fn parse_scrape(data: web::Data<PeerStore>, req: HttpRequest)
+//    -> impl Future<Item = HttpResponse, Error = Error> 
+{
     let scrape_request = ScrapeRequest::new(req.query_string());
 
     match scrape_request {
@@ -71,7 +74,7 @@ mod tests {
                 .service(
                     web::resource("announce")
                         .guard(guard::Header("content-type", "text/plain"))
-                        .route(web::get().to(parse_announce)),
+                        .route(web::get().to_async(parse_announce)),
                 )
                 .service(
                     web::resource("scrape")
@@ -95,7 +98,7 @@ mod tests {
                 .service(
                     web::resource("announce")
                         .guard(guard::Header("content-type", "text/plain"))
-                        .route(web::get().to(parse_announce)),
+                        .route(web::get().to_async(parse_announce)),
                 )
                 .service(
                     web::resource("scrape")
@@ -165,7 +168,7 @@ mod tests {
                 .service(
                     web::resource("announce")
                         .guard(guard::Header("content-type", "text/plain"))
-                        .route(web::get().to(parse_announce)),
+                        .route(web::get().to_async(parse_announce)),
                 )
                 .service(
                     web::resource("scrape")

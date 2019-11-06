@@ -24,16 +24,17 @@ many of the newest official standards and de facto extensions in order to
 create a robust and performant distibution system that can be used to legally
 serve many swarms with minimal downtime.
 
-## Features
-- Asynchronous operation (in progress)
+## Current Progress
+The BitTorrent-specific parts of the codebase are finished and ready for testing. These modules do include IPv6 support as described in the BitTorrent specification. There are in-memory storage solutions already implemented, and need to undergo actual testing. The networking modules are undergoing a move from actix-web to Hyper in an effort to cut down on extraneous functionality and better leverage async support. There is a search underway for statistics crates that are easily used to analyze the data that will be produced by the storage backends.
+
+## (Planned) Features
+- Asynchronous operation
 - Multithreading
 - IPv4 and IPv6 support
 - Storage-agnostic backend
-- Distributed fault-tolerance through [Raft](https://raft.github.io/) (not
-    started)
-- Swarm statistics (in progress)
-- Private tracker support (in progress)
-- [Redis](https://redis.io) support (not started)
+- Distributed fault-tolerance
+- Swarm statistics
+- Private tracker support
 
 ## Notes
 ### Fault-Tolerance

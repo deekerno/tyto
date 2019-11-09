@@ -9,6 +9,7 @@ use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 
 use crate::bittorrent::Peer;
+use crate::bittorrent::ScrapeFile;
 
 struct PeerList(Vec<Peer>);
 
@@ -50,6 +51,9 @@ pub trait TorrentStorage {
     // This should flush all torrent details that are held in memory to the
     // backing storage in use for production.
     fn flush_torrents(&self);
+
+    // This should return ScrapeFiles for all info_hashes supplied
+    fn get_scrapes(&self, info_hashes: Vec<String>) -> Vec<ScrapeFile>;
 }
 
 #[derive(Serialize, Deserialize)]
@@ -90,7 +94,7 @@ impl TorrentMemoryStore {
     pub fn new(path: String) -> Result<TorrentMemoryStore, &'static str> {
         Ok(TorrentMemoryStore {
             torrents: Arc::new(RwLock::new(TorrentRecords::new())),
-            path,
+            path: "/test".to_string(),
         })
     }
 }
@@ -110,6 +114,27 @@ impl TorrentStorage for TorrentMemoryStore {
         let mut torrent_flat_file_writer = BufWriter::new(fs::File::create(&self.path).expect("Could not write to database path"));
 
         serialize_into(&mut torrent_flat_file_writer, &*torrents).expect("Could not write database to file");
+    }
+
+    fn get_scrapes(&self, info_hashes: Vec<String>) -> Vec<ScrapeFile> {
+        let torrents = self.torrents.read();
+        let mut scrapes = Vec::new();
+        
+        for info_hash in info_hashes {
+            if let Some(t) = torrents.get(&info_hash) {
+                scrapes.push(
+                    ScrapeFile {
+                        info_hash: info_hash.clone(),
+                        complete: t.complete,
+                        downloaded: t.downloaded,
+                        incomplete: t.incomplete,
+                        name: None,
+                    }
+                );
+            }
+        }
+
+        scrapes
     }
 }
 

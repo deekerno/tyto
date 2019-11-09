@@ -62,11 +62,24 @@ impl ToBencode for ScrapeResponse {
     const MAX_DEPTH: usize = 5;
 
     fn encode(&self, encoder: SingleItemEncoder) -> Result<(), Error> {
-        encoder.emit_dict(|mut e| {
-            e.emit_pair(b"files", &self.files)?;
+        match &self.failure_reason {
+            Some(reason) => {
+                encoder.emit_dict(|mut e| {
+                    e.emit_pair(b"failure_reason", reason)?;
 
-            Ok(())
-        })?;
+                    Ok(())
+                })?;
+            }
+        
+            None => {
+                encoder.emit_dict(|mut e| {
+                    e.emit_pair(b"files", &self.files)?;
+
+                    Ok(())
+                })?;
+            }
+
+        }
 
         Ok(())
     }
@@ -142,6 +155,7 @@ mod tests {
     #[test]
     fn scrape_response_encoding() {
         let file1 = ScrapeFile {
+            info_hash: "blah".to_string(),
             complete: 1,
             downloaded: 2,
             incomplete: 3,
@@ -149,6 +163,7 @@ mod tests {
         };
 
         let file2 = ScrapeFile {
+            info_hash: "test".to_string(),
             complete: 4000,
             downloaded: 5678,
             incomplete: 785,

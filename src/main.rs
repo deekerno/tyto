@@ -37,22 +37,28 @@ fn main() -> io::Result<()> {
 
     HttpServer::new(move || {
         // Creates a data object to be shared between actor threads
-        let data = web::Data::new(storage::PeerStore::new().unwrap());
+        let peer_storage = storage::PeerStore::new().unwrap();
+
+        // TODO: Needs to read from a configuration
+        let torrent_storage = storage::TorrentMemoryStore::new("".to_string()).unwrap();
+        let peer_data = web::Data::new(peer_storage);
+        let torrent_data = web::Data::new(torrent_storage);
 
         App::new()
             .wrap(middleware::Logger::default())
-            .register_data(data.clone())
             .service(
-                web::resource("announce")
+                web::scope("/announce")
+                    .data(peer_data)
                     .guard(guard::Header("content-type", "text/plain"))
-                    .route(web::get().to_async(network::parse_announce)),
+                    .route("/", web::get().to_async(network::parse_announce)),
             )
             .service(
-                web::resource("scrape")
+                web::scope("/scrape")
+                    .data(torrent_data)
                     .guard(guard::Header("content-type", "text/plain"))
-                    .route(web::get().to(network::parse_scrape)),
+                    .route("/", web::get().to_async(network::parse_scrape)),
             )
-            .default_service(web::route().to(HttpResponse::MethodNotAllowed))
+            .default_service(web::route().to_async(HttpResponse::MethodNotAllowed))
     })
     .bind("127.0.0.1:8585")?
     .run()

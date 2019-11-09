@@ -17,14 +17,14 @@ trait Compact {
 
 // These two peer types could probably be implemented more elegantly
 // with a trait, but there's only two types right now, so it's not a lot of work
-#[derive(Clone, Eq, Ord, PartialEq, PartialOrd, Hash)]
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd, Hash, Debug)]
 pub struct Peerv4 {
     pub peer_id: String, // This should be 20 bytes in length
     pub ip: Ipv4Addr,
     pub port: u16,
 }
 
-#[derive(Clone, Eq, Ord, PartialEq, PartialOrd, Hash)]
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd, Hash, Debug)]
 pub struct Peerv6 {
     pub peer_id: String, // This should be 20 bytes in length
     pub ip: Ipv6Addr,
@@ -58,7 +58,7 @@ impl Compact for Peerv6 {
     }
 }
 
-#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
 pub enum Peer {
     V4(Peerv4),
     V6(Peerv6),
@@ -73,6 +73,7 @@ impl Compact for Peer {
     }
 }
 
+#[derive(Debug)]
 pub struct AnnounceRequest {
     pub info_hash: String,
     pub peer: String,
@@ -192,7 +193,7 @@ impl AnnounceRequest {
 
 // Peer types are functionally the same, but due to different
 // byte lengths, they should be separated for client compatibility
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct AnnounceResponse {
     pub failure_reason: Option<String>,
     pub interval: u32,
@@ -250,6 +251,7 @@ impl AnnounceResponse {
 
 #[derive(Debug, Default)]
 pub struct ScrapeFile {
+    pub info_hash: String,
     pub complete: u32,
     pub downloaded: u32,
     pub incomplete: u32,
@@ -257,18 +259,18 @@ pub struct ScrapeFile {
 }
 
 pub struct ScrapeRequest {
-    info_hashes: Vec<String>,
+    pub info_hashes: Vec<String>,
 }
 
 impl ScrapeRequest {
-    pub fn new(url_string: &str) -> Result<ScrapeRequest, &str> {
+    pub fn new(url_string: &str) -> Result<ScrapeRequest, ScrapeResponse> {
         let request_kv_pairs = form_urlencoded::parse(url_string.as_bytes()).into_owned();
         let mut info_hashes = Vec::new();
 
         for (key, value) in request_kv_pairs {
             match key.as_str() {
                 "info_hash" => info_hashes.push(value),
-                _ => return Err("Malformed scrape request"),
+                _ => return Err(ScrapeResponse::failure("Malformed scrape request".to_string())),
             }
         }
 
@@ -276,15 +278,25 @@ impl ScrapeRequest {
     }
 }
 
+#[derive(Default, Debug)]
 pub struct ScrapeResponse {
+    pub failure_reason: Option<String>,
     pub files: HashMap<String, ScrapeFile>,
 }
 
 impl ScrapeResponse {
     pub fn new() -> Result<ScrapeResponse, ()> {
         Ok(ScrapeResponse {
+            failure_reason: None,
             files: HashMap::new(),
         })
+    }
+
+    pub fn failure(reason: String) -> ScrapeResponse {
+        ScrapeResponse {
+            failure_reason: Some(reason),
+            ..Default::default()
+        }
     }
 
     pub fn add_file(&mut self, info_hash: String, scrape_file: ScrapeFile) {

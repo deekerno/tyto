@@ -15,7 +15,7 @@ extern crate log;
 
 fn main() -> io::Result<()> {
     if std::env::var("RUST_LOG").is_err() {
-        std::env::set_var("RUST_LOG", "actix_web=DEBUG");
+        std::env::set_var("RUST_LOG=warning", "actix_web=DEBUG");
     }
     pretty_env_logger::init_timed();
 
@@ -41,24 +41,23 @@ fn main() -> io::Result<()> {
 
         // TODO: Needs to read from a configuration
         let torrent_storage = storage::TorrentMemoryStore::new("".to_string()).unwrap();
-        let peer_data = web::Data::new(peer_storage);
-        let torrent_data = web::Data::new(torrent_storage);
 
         App::new()
             .wrap(middleware::Logger::default())
             .service(
-                web::scope("/announce")
-                    .data(peer_data)
-                    .guard(guard::Header("content-type", "text/plain"))
-                    .route("/", web::get().to_async(network::parse_announce)),
+                web::scope("announce")
+                    .data(peer_storage)
+                    .route("", web::get().to_async(network::parse_announce)),
             )
             .service(
-                web::scope("/scrape")
-                    .data(torrent_data)
-                    .guard(guard::Header("content-type", "text/plain"))
-                    .route("/", web::get().to_async(network::parse_scrape)),
+                web::scope("scrape")
+                    .data(torrent_storage)
+                    .route("", web::get().to_async(network::parse_scrape)),
             )
-            .default_service(web::route().to_async(HttpResponse::MethodNotAllowed))
+            .service(
+                web::scope("/")
+                    .route("", web::get().to_async(|| HttpResponse::MethodNotAllowed()))
+            )
     })
     .bind("127.0.0.1:8585")?
     .run()

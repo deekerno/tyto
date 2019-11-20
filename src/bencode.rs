@@ -70,7 +70,7 @@ impl ToBencode for ScrapeResponse {
                     Ok(())
                 })?;
             }
-        
+
             None => {
                 encoder.emit_dict(|mut e| {
                     e.emit_pair(b"files", &self.files)?;
@@ -78,7 +78,6 @@ impl ToBencode for ScrapeResponse {
                     Ok(())
                 })?;
             }
-
         }
 
         Ok(())

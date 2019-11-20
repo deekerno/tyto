@@ -55,8 +55,7 @@ fn main() -> io::Result<()> {
                     .route("", web::get().to_async(network::parse_scrape)),
             )
             .service(
-                web::scope("/")
-                    .route("", web::get().to_async(|| HttpResponse::MethodNotAllowed()))
+                web::scope("/").route("", web::get().to_async(|| HttpResponse::MethodNotAllowed())),
             )
     })
     .bind("127.0.0.1:8585")?

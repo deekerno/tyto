@@ -102,35 +102,36 @@ impl TorrentMemoryStore {
 // This is just a memory-backed implementation of a torrent storage solution;
 // production systems should probably use a more trustworthy solution, e.g. SQL
 impl TorrentStorage for TorrentMemoryStore {
-    
     fn get_torrents(&mut self) {
-        let mut torrent_flat_file_reader = BufReader::new(fs::File::open(&self.path).expect("Could not open database file"));
-        let torrents = deserialize_from(&mut torrent_flat_file_reader).expect("Could not deserialize");
+        let mut torrent_flat_file_reader =
+            BufReader::new(fs::File::open(&self.path).expect("Could not open database file"));
+        let torrents =
+            deserialize_from(&mut torrent_flat_file_reader).expect("Could not deserialize");
         self.torrents = Arc::new(RwLock::new(torrents));
     }
-    
+
     fn flush_torrents(&self) {
         let torrents = self.torrents.read();
-        let mut torrent_flat_file_writer = BufWriter::new(fs::File::create(&self.path).expect("Could not write to database path"));
+        let mut torrent_flat_file_writer =
+            BufWriter::new(fs::File::create(&self.path).expect("Could not write to database path"));
 
-        serialize_into(&mut torrent_flat_file_writer, &*torrents).expect("Could not write database to file");
+        serialize_into(&mut torrent_flat_file_writer, &*torrents)
+            .expect("Could not write database to file");
     }
 
     fn get_scrapes(&self, info_hashes: Vec<String>) -> Vec<ScrapeFile> {
         let torrents = self.torrents.read();
         let mut scrapes = Vec::new();
-        
+
         for info_hash in info_hashes {
             if let Some(t) = torrents.get(&info_hash) {
-                scrapes.push(
-                    ScrapeFile {
-                        info_hash: info_hash.clone(),
-                        complete: t.complete,
-                        downloaded: t.downloaded,
-                        incomplete: t.incomplete,
-                        name: None,
-                    }
-                );
+                scrapes.push(ScrapeFile {
+                    info_hash: info_hash.clone(),
+                    complete: t.complete,
+                    downloaded: t.downloaded,
+                    incomplete: t.incomplete,
+                    name: None,
+                });
             }
         }
 

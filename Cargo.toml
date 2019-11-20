@@ -19,6 +19,7 @@ percent-encoding = "*"
 pretty_env_logger = "*"
 raft-rs = "*"
 rand = "*"
+regex = "*"
 serde = { version = "1.0", features = ["derive", "rc"] }
 url = "*"
 

@@ -6,14 +6,14 @@ use crate::bencode;
 use crate::bittorrent::{
     AnnounceRequest, AnnounceResponse, Peer, Peerv4, Peerv6, ScrapeRequest, ScrapeResponse,
 };
-use crate::storage::{PeerStorage, PeerStore, TorrentMemoryStore, TorrentStorage};
+use crate::storage::{PeerStore, Stores, TorrentMemoryStore};
 use crate::util::Event;
 
 // This will eventually be read from the configuration YAML.
 const INTERVAL: u32 = 60;
 
 pub fn parse_announce(
-    data: web::Data<PeerStore>,
+    data: web::Data<Stores>,
     req: HttpRequest,
 ) -> impl Future<Item = HttpResponse, Error = Error> {
     let announce_request = AnnounceRequest::new(req.query_string(), req.connection_info().remote());
@@ -22,10 +22,10 @@ pub fn parse_announce(
         Ok(parsed_req) => {
             match parsed_req.event {
                 Event::Started => {
-                    data.put_leecher(parsed_req.info_hash.clone(), parsed_req.peer);
+                    data.peer_store.put_leecher(parsed_req.info_hash.clone(), parsed_req.peer);
 
                     let peer_list =
-                        data.get_peers(parsed_req.info_hash, parsed_req.numwant.unwrap());
+                        data.peer_store.get_peers(parsed_req.info_hash, parsed_req.numwant.unwrap());
                     let mut peers = Vec::new();
                     let mut peers6 = Vec::new();
 
@@ -46,7 +46,7 @@ pub fn parse_announce(
                 }
                 Event::Stopped => {
                     let peer_list =
-                        data.get_peers(parsed_req.info_hash, parsed_req.numwant.unwrap());
+                        data.peer_store.get_peers(parsed_req.info_hash, parsed_req.numwant.unwrap());
                     let mut peers = Vec::new();
                     let mut peers6 = Vec::new();
 
@@ -66,10 +66,10 @@ pub fn parse_announce(
                     fut_ok(HttpResponse::Ok().content_type("text/plain").body(bencoded))
                 }
                 Event::Completed => {
-                    data.promote_leecher(parsed_req.info_hash.clone(), parsed_req.peer);
+                    data.peer_store.promote_leecher(parsed_req.info_hash.clone(), parsed_req.peer);
 
                     let peer_list =
-                        data.get_peers(parsed_req.info_hash, parsed_req.numwant.unwrap());
+                        data.peer_store.get_peers(parsed_req.info_hash, parsed_req.numwant.unwrap());
                     let mut peers = Vec::new();
                     let mut peers6 = Vec::new();
 
@@ -90,7 +90,7 @@ pub fn parse_announce(
                 }
                 Event::None => {
                     let peer_list =
-                        data.get_peers(parsed_req.info_hash, parsed_req.numwant.unwrap());
+                        data.peer_store.get_peers(parsed_req.info_hash, parsed_req.numwant.unwrap());
                     let mut peers = Vec::new();
                     let mut peers6 = Vec::new();
 
@@ -121,13 +121,13 @@ pub fn parse_announce(
 }
 
 pub fn parse_scrape(
-    data: web::Data<TorrentMemoryStore>,
+    data: web::Data<Stores>,
     req: HttpRequest,
 ) -> impl Future<Item = HttpResponse, Error = Error> {
     let scrape_request = ScrapeRequest::new(req.query_string());
     match scrape_request {
         Ok(parsed_req) => {
-            let scrape_files = data.get_scrapes(parsed_req.info_hashes);
+            let scrape_files = data.torrent_store.get_scrapes(parsed_req.info_hashes);
             let mut scrape_response = ScrapeResponse::new().unwrap();
 
             for file in scrape_files {
@@ -153,15 +153,15 @@ mod tests {
     use actix_web::{guard, test, web, App, HttpResponse};
 
     use crate::bittorrent::{Peerv4, Peerv6};
-    use crate::storage::{PeerStorage, PeerStore, Torrent, TorrentMemoryStore, TorrentStorage};
+    use crate::storage::{PeerStore, Stores, Torrent, TorrentMemoryStore};
     use std::net::{Ipv4Addr, Ipv6Addr};
 
     #[test]
     fn index_get_not_allowed() {
-        let data = web::Data::new(PeerStore::new().unwrap());
+        let stores = web::Data::new(Stores::new("test".to_string()));
         let mut app = test::init_service(
             App::new()
-                .register_data(data.clone())
+                .register_data(stores.clone())
                 .service(
                     web::resource("announce")
                         .guard(guard::Header("content-type", "text/plain"))
@@ -182,8 +182,8 @@ mod tests {
 
     #[test]
     fn announce_get_malformed() {
-        let peer_store = PeerStore::new().unwrap();
-        let data = web::Data::new(peer_store);
+        let stores = Stores::new("test".to_string());
+        let data = web::Data::new(stores);
 
         let app = test::init_service(
             App::new()
@@ -288,22 +288,20 @@ mod tests {
 
     #[test]
     fn scrape_get_malformed() {
-        let peer_storage = PeerStore::new().unwrap();
-        let torrent_storage = TorrentMemoryStore::new("".to_string()).unwrap();
-        let peer_data = web::Data::new(peer_storage);
-        let torrent_data = web::Data::new(torrent_storage);
+        let stores = Stores::new("test".to_string());
+        let data = web::Data::new(stores);
 
         let app = test::init_service(
             App::new()
                 .service(
                     web::scope("/announce")
-                        .data(peer_data.clone())
+                        .register_data(data.clone())
                         .guard(guard::Header("content-type", "text/plain"))
                         .route("/", web::get().to_async(parse_announce)),
                 )
                 .service(
                     web::scope("/scrape")
-                        .data(torrent_data.clone())
+                        .register_data(data.clone())
                         .guard(guard::Header("content-type", "text/plain"))
                         .route("/", web::get().to_async(parse_scrape)),
                 )
@@ -316,7 +314,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri("/scrape?bad_stuff=123")
             .to_http_request();
-        let resp = test::block_on(parse_scrape(torrent_data, req)).unwrap();
+        let resp = test::block_on(parse_scrape(data, req)).unwrap();
 
         assert_eq!(
             resp.body().as_ref().unwrap(),
@@ -326,7 +324,7 @@ mod tests {
 
     #[test]
     fn scrape_get_success() {
-        let torrent_storage = TorrentMemoryStore::new("".to_string()).unwrap();
+        let stores = Stores::new("test".to_string());
 
         let info_hash1 = "A1B2C3D4E5F6G7H8I9J0".to_string();
         let torrent1 = Torrent::new(info_hash1, 10, 34, 7, 10000000);
@@ -335,26 +333,24 @@ mod tests {
         let torrent2 = Torrent::new(info_hash2, 25, 57, 19, 20000000);
 
         {
-            let mut store = torrent_storage.torrents.write();
+            let mut store = stores.torrent_store.torrents.write();
             store.insert(torrent1.info_hash.clone(), torrent1);
             store.insert(torrent2.info_hash.clone(), torrent2);
         }
 
-        let peer_storage = PeerStore::new().unwrap();
-        let peer_data = web::Data::new(peer_storage);
-        let torrent_data = web::Data::new(torrent_storage);
+        let data = web::Data::new(stores);
 
         let app = test::init_service(
             App::new()
                 .service(
                     web::scope("/announce")
-                        .data(peer_data.clone())
+                        .data(data.clone())
                         .guard(guard::Header("content-type", "text/plain"))
                         .route("/", web::get().to_async(parse_announce)),
                 )
                 .service(
                     web::scope("/scrape")
-                        .data(torrent_data.clone())
+                        .data(data.clone())
                         .guard(guard::Header("content-type", "text/plain"))
                         .route("/", web::get().to_async(parse_scrape)),
                 )
@@ -366,7 +362,7 @@ mod tests {
 
         let proper_resp = HttpResponse::Ok().content_type("text/plain").body("d5:filesd20:A1B2C3D4E5F6G7H8I9J0d8:completei10e10:downloadedi34e10:incompletei7ee20:B2C3D4E5F6G7H8I9J0K1d8:completei25e10:downloadedi57e10:incompletei19eeee".as_bytes());
         let req = test::TestRequest::get().uri(uri).to_http_request();
-        let resp = test::block_on(parse_scrape(torrent_data, req)).unwrap();
+        let resp = test::block_on(parse_scrape(data, req)).unwrap();
 
         assert_eq!(
             resp.body().as_ref().unwrap(),

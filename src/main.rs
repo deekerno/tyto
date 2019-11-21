@@ -37,21 +37,22 @@ fn main() -> io::Result<()> {
 
     HttpServer::new(move || {
         // Creates a data object to be shared between actor threads
-        let peer_storage = storage::PeerStore::new().unwrap();
+        let stores = web::Data::new(storage::Stores::new("test".to_string()));
+        //let peer_storage = storage::PeerStore::new().unwrap();
 
         // TODO: Needs to read from a configuration
-        let torrent_storage = storage::TorrentMemoryStore::new("".to_string()).unwrap();
+        //let torrent_storage = storage::TorrentMemoryStore::new("".to_string()).unwrap();
 
         App::new()
             .wrap(middleware::Logger::default())
             .service(
                 web::scope("announce")
-                    .data(peer_storage)
+                    .register_data(stores.clone())
                     .route("", web::get().to_async(network::parse_announce)),
             )
             .service(
                 web::scope("scrape")
-                    .data(torrent_storage)
+                    .register_data(stores.clone())
                     .route("", web::get().to_async(network::parse_scrape)),
             )
             .service(

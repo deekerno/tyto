@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::bittorrent::Peer;
 use crate::bittorrent::ScrapeFile;
 
+#[derive(Debug, Clone)]
 struct PeerList(Vec<Peer>);
 
 // Wasn't a huge fan of this, but couldn't do it using FromIterator
@@ -34,16 +35,16 @@ impl PeerList {
     }
 }
 
-pub trait PeerStorage {
+/*pub trait PeerStorage {
     fn put_seeder(&self, info_hash: String, peer: Peer);
     fn remove_seeder(&self, info_hash: String, peer: Peer);
     fn put_leecher(&self, info_hash: String, peer: Peer);
     fn remove_leecher(&self, info_hash: String, peer: Peer);
     fn promote_leecher(&self, info_hash: String, peer: Peer);
     fn get_peers(&self, info_hash: String, numwant: u32) -> Vec<Peer>;
-}
+}*/
 
-pub trait TorrentStorage {
+/*pub trait TorrentStorage {
     // This should retrieve all the torrents from whatever backing storage
     // is being used to store torrent details, e.g. SQL.
     fn get_torrents(&mut self);
@@ -54,9 +55,9 @@ pub trait TorrentStorage {
 
     // This should return ScrapeFiles for all info_hashes supplied
     fn get_scrapes(&self, info_hashes: Vec<String>) -> Vec<ScrapeFile>;
-}
+}*/
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Torrent {
     pub info_hash: String,
     pub complete: u32,   // Number of seeders
@@ -85,6 +86,7 @@ impl Torrent {
 
 type TorrentRecords = HashMap<String, Torrent>;
 
+#[derive(Debug, Clone)]
 pub struct TorrentMemoryStore {
     pub torrents: Arc<RwLock<TorrentRecords>>,
     pub path: String,
@@ -94,14 +96,10 @@ impl TorrentMemoryStore {
     pub fn new(path: String) -> Result<TorrentMemoryStore, &'static str> {
         Ok(TorrentMemoryStore {
             torrents: Arc::new(RwLock::new(TorrentRecords::new())),
-            path: "/test".to_string(),
+            path,
         })
     }
-}
 
-// This is just a memory-backed implementation of a torrent storage solution;
-// production systems should probably use a more trustworthy solution, e.g. SQL
-impl TorrentStorage for TorrentMemoryStore {
     fn get_torrents(&mut self) {
         let mut torrent_flat_file_reader =
             BufReader::new(fs::File::open(&self.path).expect("Could not open database file"));
@@ -119,7 +117,7 @@ impl TorrentStorage for TorrentMemoryStore {
             .expect("Could not write database to file");
     }
 
-    fn get_scrapes(&self, info_hashes: Vec<String>) -> Vec<ScrapeFile> {
+    pub fn get_scrapes(&self, info_hashes: Vec<String>) -> Vec<ScrapeFile> {
         let torrents = self.torrents.read();
         let mut scrapes = Vec::new();
 
@@ -141,6 +139,7 @@ impl TorrentStorage for TorrentMemoryStore {
 
 // Should these be byte strings instead of just peer types?
 // Or should Hash be implemented for the peer types?
+#[derive(Debug, Clone)]
 pub struct Swarm {
     pub seeders: HashSet<Peer>,
     pub leechers: HashSet<Peer>,
@@ -180,6 +179,7 @@ impl Swarm {
 type PeerRecords = HashMap<String, Swarm>;
 
 // Sharable between threads, multiple readers, one writer
+#[derive(Debug, Clone)]
 pub struct PeerStore {
     pub records: Arc<RwLock<PeerRecords>>,
 }
@@ -190,10 +190,8 @@ impl PeerStore {
             records: Arc::new(RwLock::new(PeerRecords::new())),
         })
     }
-}
 
-impl PeerStorage for PeerStore {
-    fn put_seeder(&self, info_hash: String, peer: Peer) {
+    pub fn put_seeder(&self, info_hash: String, peer: Peer) {
         let mut store = self.records.write();
         match store.get_mut(&info_hash) {
             Some(sw) => {
@@ -207,14 +205,14 @@ impl PeerStorage for PeerStore {
         }
     }
 
-    fn remove_seeder(&self, info_hash: String, peer: Peer) {
+    pub fn remove_seeder(&self, info_hash: String, peer: Peer) {
         let mut store = self.records.write();
         if let Some(sw) = store.get_mut(&info_hash) {
             sw.remove_seeder(peer);
         }
     }
 
-    fn put_leecher(&self, info_hash: String, peer: Peer) {
+    pub fn put_leecher(&self, info_hash: String, peer: Peer) {
         let mut store = self.records.write();
         match store.get_mut(&info_hash) {
             Some(sw) => {
@@ -228,14 +226,14 @@ impl PeerStorage for PeerStore {
         }
     }
 
-    fn remove_leecher(&self, info_hash: String, peer: Peer) {
+    pub fn remove_leecher(&self, info_hash: String, peer: Peer) {
         let mut store = self.records.write();
         if let Some(sw) = store.get_mut(&info_hash) {
             sw.remove_leecher(peer);
         }
     }
 
-    fn promote_leecher(&self, info_hash: String, peer: Peer) {
+    pub fn promote_leecher(&self, info_hash: String, peer: Peer) {
         let mut store = self.records.write();
         if let Some(sw) = store.get_mut(&info_hash) {
             sw.promote_leecher(peer);
@@ -243,7 +241,7 @@ impl PeerStorage for PeerStore {
     }
 
     // Returns a randomized vector of peers to be returned to client
-    fn get_peers(&self, info_hash: String, numwant: u32) -> Vec<Peer> {
+    pub fn get_peers(&self, info_hash: String, numwant: u32) -> Vec<Peer> {
         let mut peer_list = PeerList::new();
 
         let store = self.records.read();
@@ -254,6 +252,21 @@ impl PeerStorage for PeerStore {
 
         // Randomized bunch of seeders and leechers
         peer_list.give_random(numwant)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Stores {
+    pub peer_store: PeerStore,
+    pub torrent_store: TorrentMemoryStore,
+}
+
+impl Stores {
+    pub fn new(torrent_store_path: String) -> Stores {
+        Stores {
+            peer_store: PeerStore::new().unwrap(),
+            torrent_store: TorrentMemoryStore::new(torrent_store_path).unwrap(),
+        }
     }
 }
 
@@ -268,7 +281,7 @@ mod tests {
 
     #[test]
     fn memory_peer_storage_put_seeder_new_swarm() {
-        let store = PeerStore::new().unwrap();
+        let stores = Stores::new("test".to_string());
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
         let peer = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
@@ -276,9 +289,10 @@ mod tests {
             port: 6893,
         });
 
-        store.put_seeder(info_hash.clone(), peer.clone());
+        stores.peer_store.put_seeder(info_hash.clone(), peer.clone());
         assert_eq!(
-            store
+            stores
+                .peer_store
                 .records
                 .read()
                 .get(&info_hash)
@@ -291,7 +305,7 @@ mod tests {
 
     #[test]
     fn memory_peer_storage_put_seeder_prior_swarm() {
-        let store = PeerStore::new().unwrap();
+        let stores = Stores::new("test".to_string());
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
         let peer1 = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
@@ -299,7 +313,7 @@ mod tests {
             port: 6893,
         });
 
-        store.put_seeder(info_hash.clone(), peer1);
+        stores.peer_store.put_seeder(info_hash.clone(), peer1);
 
         let peer2 = Peer::V4(Peerv4 {
             peer_id: "TSRQPONMLKJIHGFEDCBA".to_string(),
@@ -307,9 +321,10 @@ mod tests {
             port: 6881,
         });
 
-        store.put_seeder(info_hash.clone(), peer2.clone());
+        stores.peer_store.put_seeder(info_hash.clone(), peer2.clone());
         assert_eq!(
-            store
+            stores
+                .peer_store
                 .records
                 .read()
                 .get(&info_hash)
@@ -322,7 +337,7 @@ mod tests {
 
     #[test]
     fn memory_peer_storage_put_leecher_new_swarm() {
-        let store = PeerStore::new().unwrap();
+        let stores = Stores::new("test".to_string());
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
         let peer = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
@@ -330,9 +345,10 @@ mod tests {
             port: 6893,
         });
 
-        store.put_leecher(info_hash.clone(), peer.clone());
+        stores.peer_store.put_leecher(info_hash.clone(), peer.clone());
         assert_eq!(
-            store
+            stores
+                .peer_store
                 .records
                 .read()
                 .get(&info_hash)
@@ -345,7 +361,7 @@ mod tests {
 
     #[test]
     fn memory_peer_storage_put_leecher_prior_swarm() {
-        let store = PeerStore::new().unwrap();
+        let stores = Stores::new("test".to_string());
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
         let peer1 = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
@@ -353,7 +369,7 @@ mod tests {
             port: 6893,
         });
 
-        store.put_seeder(info_hash.clone(), peer1);
+        stores.peer_store.put_seeder(info_hash.clone(), peer1);
 
         let peer2 = Peer::V4(Peerv4 {
             peer_id: "TSRQPONMLKJIHGFEDCBA".to_string(),
@@ -361,9 +377,10 @@ mod tests {
             port: 6881,
         });
 
-        store.put_leecher(info_hash.clone(), peer2.clone());
+        stores.peer_store.put_leecher(info_hash.clone(), peer2.clone());
         assert_eq!(
-            store
+            stores
+                .peer_store
                 .records
                 .read()
                 .get(&info_hash)
@@ -376,7 +393,7 @@ mod tests {
 
     #[test]
     fn memory_peer_storage_remove_seeder() {
-        let store = PeerStore::new().unwrap();
+        let stores = Stores::new("test".to_string());
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
         let peer = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
@@ -384,11 +401,12 @@ mod tests {
             port: 6893,
         });
 
-        store.put_seeder(info_hash.clone(), peer.clone());
+        stores.peer_store.put_seeder(info_hash.clone(), peer.clone());
 
-        store.remove_seeder(info_hash.clone(), peer.clone());
+        stores.peer_store.remove_seeder(info_hash.clone(), peer.clone());
         assert_eq!(
-            store
+            stores
+                .peer_store
                 .records
                 .read()
                 .get(&info_hash)
@@ -401,7 +419,7 @@ mod tests {
 
     #[test]
     fn memory_peer_storage_remove_leecher() {
-        let store = PeerStore::new().unwrap();
+        let stores = Stores::new("test".to_string());
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
         let peer = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
@@ -409,11 +427,12 @@ mod tests {
             port: 6893,
         });
 
-        store.put_leecher(info_hash.clone(), peer.clone());
+        stores.peer_store.put_leecher(info_hash.clone(), peer.clone());
 
-        store.remove_leecher(info_hash.clone(), peer.clone());
+        stores.peer_store.remove_leecher(info_hash.clone(), peer.clone());
         assert_eq!(
-            store
+            stores
+                .peer_store
                 .records
                 .read()
                 .get(&info_hash)
@@ -426,7 +445,7 @@ mod tests {
 
     #[test]
     fn memory_peer_storage_promote_leecher() {
-        let store = PeerStore::new().unwrap();
+        let stores = Stores::new("test".to_string());
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
         let peer = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
@@ -434,11 +453,12 @@ mod tests {
             port: 6893,
         });
 
-        store.put_leecher(info_hash.clone(), peer.clone());
-        store.promote_leecher(info_hash.clone(), peer.clone());
+        stores.peer_store.put_leecher(info_hash.clone(), peer.clone());
+        stores.peer_store.promote_leecher(info_hash.clone(), peer.clone());
 
         assert_eq!(
-            store
+            stores
+                .peer_store
                 .records
                 .read()
                 .get(&info_hash)

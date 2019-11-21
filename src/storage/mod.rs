@@ -135,6 +135,19 @@ impl TorrentMemoryStore {
 
         scrapes
     }
+
+    pub fn get_announce_stats(&self, info_hash: String) -> (u32, u32) {
+        let torrents = self.torrents.read();
+        let mut complete: u32 = 0;
+        let mut incomplete: u32 = 0;
+
+        if let Some(t) = torrents.get(&info_hash) {
+            complete = t.complete;
+            incomplete = t.incomplete;
+        }
+
+        (complete, incomplete)
+    }
 }
 
 // Should these be byte strings instead of just peer types?
@@ -162,11 +175,11 @@ impl Swarm {
     }
 
     fn remove_seeder(&mut self, peer: Peer) {
-        let result = self.seeders.remove(&peer);
+        let _result = self.seeders.remove(&peer);
     }
 
     fn remove_leecher(&mut self, peer: Peer) {
-        let result = self.leechers.remove(&peer);
+        let _result = self.leechers.remove(&peer);
     }
 
     fn promote_leecher(&mut self, peer: Peer) {

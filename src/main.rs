@@ -6,7 +6,7 @@ pub mod util;
 
 use std::io;
 
-use actix_web::{guard, middleware, web, App, HttpResponse, HttpServer};
+use actix_web::{middleware, web, App, HttpResponse, HttpServer};
 use clap::{App as ClapApp, Arg};
 use pretty_env_logger;
 
@@ -37,11 +37,8 @@ fn main() -> io::Result<()> {
 
     HttpServer::new(move || {
         // Creates a data object to be shared between actor threads
-        let stores = web::Data::new(storage::Stores::new("test".to_string()));
-        //let peer_storage = storage::PeerStore::new().unwrap();
-
         // TODO: Needs to read from a configuration
-        //let torrent_storage = storage::TorrentMemoryStore::new("".to_string()).unwrap();
+        let stores = web::Data::new(storage::Stores::new("test".to_string()));
 
         App::new()
             .wrap(middleware::Logger::default())

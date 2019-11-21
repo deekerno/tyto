@@ -1,12 +1,9 @@
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use futures::{future::ok as fut_ok, Future};
-use std::net::{IpAddr, Ipv4Addr};
 
 use crate::bencode;
-use crate::bittorrent::{
-    AnnounceRequest, AnnounceResponse, Peer, Peerv4, Peerv6, ScrapeRequest, ScrapeResponse,
-};
-use crate::storage::{PeerStore, Stores, TorrentMemoryStore};
+use crate::bittorrent::{AnnounceRequest, AnnounceResponse, Peer, ScrapeRequest, ScrapeResponse};
+use crate::storage::Stores;
 use crate::util::Event;
 
 // This will eventually be read from the configuration YAML.
@@ -25,7 +22,7 @@ pub fn parse_announce(
                     data.peer_store.put_leecher(parsed_req.info_hash.clone(), parsed_req.peer);
 
                     let peer_list =
-                        data.peer_store.get_peers(parsed_req.info_hash, parsed_req.numwant.unwrap());
+                        data.peer_store.get_peers(parsed_req.info_hash.clone(), parsed_req.numwant.unwrap());
                     let mut peers = Vec::new();
                     let mut peers6 = Vec::new();
 
@@ -39,8 +36,10 @@ pub fn parse_announce(
                     peers.sort();
                     peers6.sort();
 
+                    let (complete, incomplete) = data.torrent_store.get_announce_stats(parsed_req.info_hash);
+
                     // Dummy values, the actuals will come from the torrent storage
-                    let response = AnnounceResponse::new(INTERVAL, 100, 23, peers, peers6);
+                    let response = AnnounceResponse::new(INTERVAL, complete, incomplete, peers, peers6);
                     let bencoded = bencode::encode_announce_response(response.unwrap());
                     fut_ok(HttpResponse::Ok().content_type("text/plain").body(bencoded))
                 }

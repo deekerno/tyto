@@ -35,28 +35,6 @@ impl PeerList {
     }
 }
 
-/*pub trait PeerStorage {
-    fn put_seeder(&self, info_hash: String, peer: Peer);
-    fn remove_seeder(&self, info_hash: String, peer: Peer);
-    fn put_leecher(&self, info_hash: String, peer: Peer);
-    fn remove_leecher(&self, info_hash: String, peer: Peer);
-    fn promote_leecher(&self, info_hash: String, peer: Peer);
-    fn get_peers(&self, info_hash: String, numwant: u32) -> Vec<Peer>;
-}*/
-
-/*pub trait TorrentStorage {
-    // This should retrieve all the torrents from whatever backing storage
-    // is being used to store torrent details, e.g. SQL.
-    fn get_torrents(&mut self);
-
-    // This should flush all torrent details that are held in memory to the
-    // backing storage in use for production.
-    fn flush_torrents(&self);
-
-    // This should return ScrapeFiles for all info_hashes supplied
-    fn get_scrapes(&self, info_hashes: Vec<String>) -> Vec<ScrapeFile>;
-}*/
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Torrent {
     pub info_hash: String,
@@ -183,9 +161,10 @@ impl Swarm {
     }
 
     fn promote_leecher(&mut self, peer: Peer) {
-        if let Some(leecher) = self.leechers.take(&peer) {
-            self.seeders.insert(leecher);
-        }
+        match self.leechers.take(&peer) {
+            Some(leecher) => { self.seeders.insert(leecher); }
+            None => { self.seeders.insert(peer); }
+        };
     }
 }
 

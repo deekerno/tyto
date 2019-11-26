@@ -15,7 +15,7 @@ __Disclaimer:__ This software must only be used in accordance with the laws of y
 
 _Tyto_ is an open source BitTorrent tracker written in [Rust](https://www.rust-lang.org). It aims to be safe, performant, and distributed.
 
-## Why Tyto?
+## Why?
 Tyto was created to facilitate the distribution of (legal) media through the
 BitTorrent protocol. Many of the popular tracker software available has not
 been updated in more than a decade. Many aspects that were "nice-to-have" at

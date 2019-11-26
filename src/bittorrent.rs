@@ -414,8 +414,8 @@ mod tests {
         });
 
         let mut localhost_port_byte_string = vec![];
-        localhost_port_byte_string.put_u32_be(2130706433); // localhost in decimal
-        localhost_port_byte_string.put_u16_be(6681);
+        localhost_port_byte_string.put_u32(2130706433); // localhost in decimal
+        localhost_port_byte_string.put_u16(6681);
 
         let compact_rep_byte_string = peer.compact();
 

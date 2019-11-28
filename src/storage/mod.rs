@@ -21,17 +21,25 @@ impl PeerList {
     }
 
     fn add_from_swarm(&mut self, elems: &HashSet<Peer>) {
-        for peer in elems.clone().into_iter() {
+        for peer in elems.iter().cloned() {
             self.0.push(peer);
         }
     }
 
     fn give_random(&mut self, numwant: u32) -> Vec<Peer> {
-        let mut rng = &mut rand::thread_rng();
-        self.0
-            .choose_multiple(&mut rng, numwant as usize)
-            .cloned()
-            .collect()
+
+        // If the total amount of peers is less than numwant,
+        // just return the entire list of peers
+        if self.0.len() <= numwant as usize {
+            self.0.clone()
+        } else {
+            // Otherwise, choose a random sampling and send it
+            let mut rng = &mut rand::thread_rng();
+            self.0
+                .choose_multiple(&mut rng, numwant as usize)
+                .cloned()
+                .collect()
+        }
     }
 }
 
@@ -114,6 +122,7 @@ impl TorrentMemoryStore {
         scrapes
     }
 
+    // Announces only require complete and incomplete
     pub fn get_announce_stats(&self, info_hash: String) -> (u32, u32) {
         let torrents = self.torrents.read();
         let mut complete: u32 = 0;
@@ -126,6 +135,28 @@ impl TorrentMemoryStore {
 
         (complete, incomplete)
     }
+
+    pub fn new_seed(&self, info_hash: String) {
+        let mut torrents = self.torrents.write();
+        if let Some(t) = torrents.get_mut(&info_hash) {
+            t.complete += 1;
+            t.incomplete -= 1;
+        }
+    }
+
+    pub fn new_leech(&self, info_hash: String) {
+        let mut torrents = self.torrents.write();
+        if let Some(t) = torrents.get_mut(&info_hash) {
+            t.incomplete += 1;
+        }
+    }
+
+    /*pub fn undo_snatch(&self, info_hash: String) {
+        let mut torrents = self.torrents.write();
+        if let Some(t) = torrents.get_mut(&info_hash) {
+            t.incomplete -= 1;
+        }
+    }*/
 }
 
 // Should these be byte strings instead of just peer types?

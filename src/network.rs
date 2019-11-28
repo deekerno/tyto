@@ -20,6 +20,7 @@ pub fn parse_announce(
             match parsed_req.event {
                 Event::Started => {
                     data.peer_store.put_leecher(parsed_req.info_hash.clone(), parsed_req.peer);
+                    data.torrent_store.new_leech(parsed_req.info_hash.clone());
 
                     let peer_list =
                         data.peer_store.get_peers(parsed_req.info_hash.clone(), parsed_req.numwant.unwrap());
@@ -43,6 +44,8 @@ pub fn parse_announce(
                     fut_ok(HttpResponse::Ok().content_type("text/plain").body(bencoded))
                 }
                 Event::Stopped => {
+                    // TODO: Need to make sure that peer is decremented from whichever swarm it
+                    // came from
                     data.peer_store.remove_seeder(parsed_req.info_hash.clone(), parsed_req.peer.clone());
                     data.peer_store.remove_leecher(parsed_req.info_hash.clone(), parsed_req.peer);
 
@@ -69,6 +72,7 @@ pub fn parse_announce(
                 }
                 Event::Completed => {
                     data.peer_store.promote_leecher(parsed_req.info_hash.clone(), parsed_req.peer);
+                    data.torrent_store.new_seed(parsed_req.info_hash.clone());
 
                     let peer_list =
                         data.peer_store.get_peers(parsed_req.info_hash.clone(), parsed_req.numwant.unwrap());

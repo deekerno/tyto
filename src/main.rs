@@ -6,6 +6,7 @@ pub mod util;
 
 use std::io;
 
+use actix_rt;
 use actix_web::{middleware, web, App, HttpResponse, HttpServer};
 use clap::{App as ClapApp, Arg};
 use pretty_env_logger;
@@ -13,7 +14,9 @@ use pretty_env_logger;
 #[macro_use]
 extern crate log;
 
-fn main() -> io::Result<()> {
+#[actix_rt::main]
+async fn main() -> Result<(), std::io::Error> {
+
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", "actix_web=DEBUG");
     }
@@ -44,18 +47,19 @@ fn main() -> io::Result<()> {
             .wrap(middleware::Logger::default())
             .service(
                 web::scope("announce")
-                    .register_data(stores.clone())
-                    .route("", web::get().to_async(network::parse_announce)),
+                    .app_data(stores.clone())
+                    .route("", web::get().to(network::parse_announce)),
             )
             .service(
                 web::scope("scrape")
-                    .register_data(stores.clone())
-                    .route("", web::get().to_async(network::parse_scrape)),
+                    .app_data(stores.clone())
+                    .route("", web::get().to(network::parse_scrape)),
             )
             .service(
-                web::scope("/").route("", web::get().to_async(|| HttpResponse::MethodNotAllowed())),
+                web::scope("/").route("", web::get().to(|| HttpResponse::MethodNotAllowed())),
             )
     })
-    .bind("127.0.0.1:8585")?
+    .bind("0.0.0.0:8585")?
     .run()
+    .await
 }

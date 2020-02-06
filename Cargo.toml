@@ -5,14 +5,15 @@ authors = ["Alexander Decurnou <ad@alx.xyz>"]
 edition = "2018"
 
 [dependencies]
-actix-web = "*"
+actix-rt = "1.0.0"
+actix-web = "2.0.0-alpha.6"
 bendy = "^0.2"
 bincode = "*"
 bytes = "*"
 clap = "*"
 config = "0.9"
 env = "*"
-futures = "0.1"
+futures = "0.3"
 log = "*"
 parking_lot = "*"
 percent-encoding = "*"

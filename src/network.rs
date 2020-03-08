@@ -1,5 +1,4 @@
-use actix_web::{web, Error, HttpRequest, HttpResponse, Responder};
-use futures::{future::ok as fut_ok, Future};
+use actix_web::{web, HttpRequest, HttpResponse, Responder};
 
 use crate::bencode;
 use crate::bittorrent::{AnnounceRequest, AnnounceResponse, Peer, ScrapeRequest, ScrapeResponse};
@@ -7,7 +6,7 @@ use crate::storage::Stores;
 use crate::util::Event;
 
 // This will eventually be read from the configuration YAML.
-const INTERVAL: u32 = 60;
+const INTERVAL: u32 = 3600;
 
 pub async fn parse_announce(
     data: web::Data<Stores>,

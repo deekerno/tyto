@@ -1,14 +1,14 @@
 pub mod bencode;
 pub mod bittorrent;
+pub mod config;
 pub mod network;
 pub mod storage;
 pub mod util;
 
-use std::io;
-
 use actix_rt;
 use actix_web::{middleware, web, App, HttpResponse, HttpServer};
 use clap::{App as ClapApp, Arg};
+use config::Config;
 use pretty_env_logger;
 
 #[macro_use]
@@ -18,7 +18,7 @@ extern crate log;
 async fn main() -> Result<(), std::io::Error> {
 
     if std::env::var("RUST_LOG").is_err() {
-        std::env::set_var("RUST_LOG", "actix_web=DEBUG");
+        std::env::set_var("RUST_LOG", "INFO");
     }
     pretty_env_logger::init_timed();
 
@@ -36,7 +36,11 @@ async fn main() -> Result<(), std::io::Error> {
         )
         .get_matches();
 
-    info!("Loading configuration...");
+    let config_path = matches.value_of("config");
+    let config = match config_path {
+        Some(path) => Config::load_config(path.to_string()),
+        None => Config::load_config("config.toml".to_string()),
+    };
 
     HttpServer::new(move || {
         // Creates a data object to be shared between actor threads
@@ -59,7 +63,7 @@ async fn main() -> Result<(), std::io::Error> {
                 web::scope("/").route("", web::get().to(|| HttpResponse::MethodNotAllowed())),
             )
     })
-    .bind("0.0.0.0:8585")?
+    .bind(config.network.binding)?
     .run()
     .await
 }

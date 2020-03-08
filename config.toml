@@ -1,0 +1,9 @@
+[network]
+binding = '0.0.0.0:6666'
+
+[storage]
+backend = 'memory'
+path = ''
+
+[bt]
+announce_rate = '1800'

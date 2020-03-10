@@ -43,7 +43,14 @@ pub async fn flush_torrents(pool: mysql_async::Pool, torrents: Vec<storage::Torr
     });
 
     let conn = conn.batch_exec(r"INSERT INTO torrents (info_hash, complete, downloaded, incomplete, balance)
-                    VALUES (:info_hash, :complete, :downloaded, :incomplete, :balance)", params).await?;
+                    VALUES (:info_hash, :complete, :downloaded, :incomplete, :balance)
+                    ON DUPLICATE KEY UPDATE 
+                        complete=VALUES(:complete), 
+                        downloaded=VALUES(:downloaded), 
+                        incomplete=VALUES(:incomplete), 
+                        balance=VALUES(:balance)", 
+                params)
+    .await?;
 
     Ok(())
 }

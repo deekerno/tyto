@@ -2,8 +2,8 @@
 binding = '0.0.0.0:6666'
 
 [storage]
-backend = 'memory'
-path = ''
+backend = 'mysql'
+path = 'mysql://localhost/tyto_test'
 
 [bt]
 announce_rate = '1800'

@@ -1,4 +1,4 @@
-//pub mod mysql;
+pub mod mysql;
 
 use std::fs;
 use std::io::{BufReader, BufWriter};

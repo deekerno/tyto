@@ -1,58 +1,49 @@
 use crate::storage;
 use hashbrown::HashMap;
-use sqlx::MySqlPool;
+use mysql_async::prelude::*;
 
-pub async fn get_torrents(pool: &mut MySqlPool) -> Result<storage::TorrentRecords, std::io::Error> {
+pub async fn get_torrents(pool: mysql_async::Pool) -> Result<storage::TorrentRecords, mysql_async::error::Error> {
     
-    let records = sqlx::query!(
-        r#"
-SELECT ID, info_hash, complete, downloaded, incomplete, balance
-FROM torrents
-ORDER BY id
-        "#
-    )
-    .fetch_all(pool)
-    .await?;
+    let conn = pool.get_conn().await?;
 
     let mut torrents = storage::TorrentRecords::new();
 
+    let result = conn.prep_exec("SELECT info_hash, complete, downloaded, incomplete, balance FROM torrents", ()).await?;
+
+    let (_, records) = result.map_and_drop(|row| {
+        let (info_hash, complete, downloaded, incomplete, balance) = mysql_async::from_row(row);
+        storage::Torrent {
+            info_hash,
+            complete,
+            downloaded,
+            incomplete,
+            balance
+        }
+    }).await?;
+
     for rec in records {
-        torrents.insert(
-            rec.info_hash,
-            storage::Torrent::new(
-                rec.info_hash,
-                rec.complete,
-                rec.downloaded,
-                rec.incomplete,
-                rec.balance
-            )
-        );
+        torrents.insert(rec.info_hash.clone(), rec);
     }
 
     Ok(torrents)
 }
 
-pub async fn flush_torrents(mut pool: &MySqlPool, torrents: Vec<storage::Torrent>) -> Result<(), std::io::Error> {
+pub async fn flush_torrents(pool: mysql_async::Pool, torrents: Vec<storage::Torrent>) -> Result<(), mysql_async::error::Error> {
     // Flushing should be accompanied by a lock on peer and torrent records
+    let conn = pool.get_conn().await?;
 
-    // TODO: I don't think that sqlx has a nice way of combining iterators
-    // and inserts, so this will just have to do for the time being.
-    for torrent in torrents {
-        let _rec = sqlx::query!(
-            r#"
-INSERT INTO torrents ( info_hash, complete, downloaded, incomplete, balance )
-VALUES ( $1, $2, $3, $4, $5 )
-ON DUPLICATE KEY UPDATE complete=VALUES($2), downloaded=VALUES($3), incomplete=VALUES($4), balance=VALUES($5)
-        "#,
-        torrent.info_hash,
-        torrent.complete,
-        torrent.downloaded,
-        torrent.incomplete,
-        torrent.balance
-        )
-        .execute(&mut pool)
-        .await?;
-    }
+    let params = torrents.into_iter().map(|torrent| {
+        params! {
+            "info_hash" => torrent.info_hash.clone(),
+            "complete" => torrent.complete,
+            "downloaded" => torrent.downloaded,
+            "incomplete" => torrent.incomplete,
+            "balance" => torrent.balance,
+        }
+    });
+
+    let conn = conn.batch_exec(r"INSERT INTO torrents (info_hash, complete, downloaded, incomplete, balance)
+                    VALUES (:info_hash, :complete, :downloaded, :incomplete, :balance)", params).await?;
 
     Ok(())
 }

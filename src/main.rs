@@ -9,9 +9,9 @@ use actix_rt;
 use actix_web::{middleware, web, App, HttpResponse, HttpServer};
 use clap::{App as ClapApp, Arg};
 use config::Config;
-//use crate::storage::mysql;
+use crate::storage::mysql;
+use mysql_async::prelude::*;
 use pretty_env_logger;
-//use sqlx::MySqlPool;
 
 #[macro_use]
 extern crate log;
@@ -43,7 +43,7 @@ async fn main() -> Result<(), std::io::Error> {
         None => Config::load_config("config.toml".to_string()),
     };
 
-    //let pool = MySqlPool::new(&config.storage.path).await;
+    let pool = mysql_async::Pool::new(&config.storage.path);
 
     HttpServer::new(move || {
         // Creates a data object to be shared between actor threads

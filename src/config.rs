@@ -80,7 +80,10 @@ impl Config {
         };
 
         info!("Binding to address: {}", &config.network.binding);
-        info!("Utilizing {} storage backend located at {}", &config.storage.backend, &config.storage.path);
+        info!(
+            "Utilizing {} storage backend located at {}",
+            &config.storage.backend, &config.storage.path
+        );
         info!("Announce interval: {} seconds", &config.bt.announce_rate);
 
         config

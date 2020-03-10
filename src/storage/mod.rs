@@ -27,7 +27,6 @@ impl PeerList {
     }
 
     fn give_random(&mut self, numwant: u32) -> Vec<Peer> {
-
         // If the total amount of peers is less than numwant,
         // just return the entire list of peers
         if self.0.len() <= numwant as usize {
@@ -193,8 +192,12 @@ impl Swarm {
 
     fn promote_leecher(&mut self, peer: Peer) {
         match self.leechers.take(&peer) {
-            Some(leecher) => { self.seeders.insert(leecher); }
-            None => { self.seeders.insert(peer); }
+            Some(leecher) => {
+                self.seeders.insert(leecher);
+            }
+            None => {
+                self.seeders.insert(peer);
+            }
         };
     }
 }
@@ -312,7 +315,9 @@ mod tests {
             port: 6893,
         });
 
-        stores.peer_store.put_seeder(info_hash.clone(), peer.clone());
+        stores
+            .peer_store
+            .put_seeder(info_hash.clone(), peer.clone());
         assert_eq!(
             stores
                 .peer_store
@@ -344,7 +349,9 @@ mod tests {
             port: 6881,
         });
 
-        stores.peer_store.put_seeder(info_hash.clone(), peer2.clone());
+        stores
+            .peer_store
+            .put_seeder(info_hash.clone(), peer2.clone());
         assert_eq!(
             stores
                 .peer_store
@@ -368,7 +375,9 @@ mod tests {
             port: 6893,
         });
 
-        stores.peer_store.put_leecher(info_hash.clone(), peer.clone());
+        stores
+            .peer_store
+            .put_leecher(info_hash.clone(), peer.clone());
         assert_eq!(
             stores
                 .peer_store
@@ -400,7 +409,9 @@ mod tests {
             port: 6881,
         });
 
-        stores.peer_store.put_leecher(info_hash.clone(), peer2.clone());
+        stores
+            .peer_store
+            .put_leecher(info_hash.clone(), peer2.clone());
         assert_eq!(
             stores
                 .peer_store
@@ -424,9 +435,13 @@ mod tests {
             port: 6893,
         });
 
-        stores.peer_store.put_seeder(info_hash.clone(), peer.clone());
+        stores
+            .peer_store
+            .put_seeder(info_hash.clone(), peer.clone());
 
-        stores.peer_store.remove_seeder(info_hash.clone(), peer.clone());
+        stores
+            .peer_store
+            .remove_seeder(info_hash.clone(), peer.clone());
         assert_eq!(
             stores
                 .peer_store
@@ -450,9 +465,13 @@ mod tests {
             port: 6893,
         });
 
-        stores.peer_store.put_leecher(info_hash.clone(), peer.clone());
+        stores
+            .peer_store
+            .put_leecher(info_hash.clone(), peer.clone());
 
-        stores.peer_store.remove_leecher(info_hash.clone(), peer.clone());
+        stores
+            .peer_store
+            .remove_leecher(info_hash.clone(), peer.clone());
         assert_eq!(
             stores
                 .peer_store
@@ -476,8 +495,12 @@ mod tests {
             port: 6893,
         });
 
-        stores.peer_store.put_leecher(info_hash.clone(), peer.clone());
-        stores.peer_store.promote_leecher(info_hash.clone(), peer.clone());
+        stores
+            .peer_store
+            .put_leecher(info_hash.clone(), peer.clone());
+        stores
+            .peer_store
+            .promote_leecher(info_hash.clone(), peer.clone());
 
         assert_eq!(
             stores

@@ -176,7 +176,7 @@ impl AnnounceRequest {
                     let ip_string = &caps[0];
                     ip = Some(ip_string.parse().unwrap());
                 } else {
-                    let ip_string:Vec<&str> = addr.split(':').collect();
+                    let ip_string: Vec<&str> = addr.split(':').collect();
                     ip = Some(ip_string[0].parse().unwrap());
                 }
             }

@@ -16,7 +16,6 @@ extern crate log;
 
 #[actix_rt::main]
 async fn main() -> Result<(), std::io::Error> {
-
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", "INFO");
     }
@@ -59,9 +58,7 @@ async fn main() -> Result<(), std::io::Error> {
                     .app_data(stores.clone())
                     .route("", web::get().to(network::parse_scrape)),
             )
-            .service(
-                web::scope("/").route("", web::get().to(|| HttpResponse::MethodNotAllowed())),
-            )
+            .service(web::scope("/").route("", web::get().to(|| HttpResponse::MethodNotAllowed())))
     })
     .bind(config.network.binding)?
     .run()

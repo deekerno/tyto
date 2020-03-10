@@ -6,7 +6,8 @@ edition = "2018"
 
 [dependencies]
 actix-rt = "1.0.0"
-actix-web = "2.0.0-alpha.6"
+actix-service = "1.0.5"
+actix-web = "2.0.0"
 bendy = "^0.2"
 bincode = "*"
 bytes = "*"

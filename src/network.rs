@@ -156,114 +156,107 @@ pub async fn parse_scrape(
     }
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
 
-    use actix_web::dev::Service;
-    use actix_web::{guard, test, web, App, HttpResponse};
+    use actix_service::Service;
+    use actix_web::{test, web, App, HttpResponse, http::StatusCode};
 
     use crate::bittorrent::{Peerv4, Peerv6};
     use crate::storage::{PeerStore, Stores, Torrent, TorrentMemoryStore};
     use std::net::{Ipv4Addr, Ipv6Addr};
 
-    #[test]
-    fn index_get_not_allowed() {
+    #[actix_rt::test]
+    async fn index_get_not_allowed() {
         let stores = web::Data::new(Stores::new("test".to_string()));
         let mut app = test::init_service(
             App::new()
-                .register_data(stores.clone())
-                .service(
-                    web::resource("announce")
-                        .guard(guard::Header("content-type", "text/plain"))
-                        .route(web::get().to(parse_announce)),
-                )
-                .service(
-                    web::resource("scrape")
-                        .guard(guard::Header("content-type", "text/plain"))
-                        .route(web::get().to(parse_scrape)),
-                )
-                .default_service(web::route().to(HttpResponse::MethodNotAllowed)),
-        );
-        let req = test::TestRequest::get().uri("/").to_request();
-        let resp = test::read_response(app.call(req)).unwrap();
+            .service(
+                web::scope("announce")
+                    .app_data(stores.clone())
+                    .route("", web::get().to(parse_announce)),
+            )
+            .service(
+                web::scope("scrape")
+                    .app_data(stores.clone())
+                    .route("", web::get().to(parse_scrape)),
+            )
+            .service(
+                web::scope("/").route("", web::get().to(|| HttpResponse::MethodNotAllowed())),
+            )
+        ).await;
+
+        let req = test::TestRequest::with_uri("/").to_request();
+        let resp = app.call(req).await.unwrap();
 
         assert!(resp.status().is_client_error());
     }
 
-    #[test]
-    fn announce_get_malformed() {
-        let stores = Stores::new("test".to_string());
-        let data = web::Data::new(stores);
-
-        let app = test::init_service(
+    #[actix_rt::test]
+    async fn announce_get_malformed() {
+        let stores = web::Data::new(Stores::new("test".to_string()));
+        let mut app = test::init_service(
             App::new()
-                .register_data(data.clone())
-                .service(
-                    web::resource("announce")
-                        .guard(guard::Header("content-type", "text/plain"))
-                        .route(web::get().to(parse_announce)),
-                )
-                .service(
-                    web::resource("scrape")
-                        .guard(guard::Header("content-type", "text/plain"))
-                        .route(web::get().to(parse_scrape)),
-                )
-                .default_service(web::route().to(HttpResponse::MethodNotAllowed)),
-        );
+            .service(
+                web::scope("announce")
+                    .app_data(stores.clone())
+                    .route("", web::get().to(parse_announce)),
+            )
+            .service(
+                web::scope("scrape")
+                    .app_data(stores.clone())
+                    .route("", web::get().to(parse_scrape)),
+            )
+            .service(
+                web::scope("/").route("", web::get().to(|| HttpResponse::MethodNotAllowed())),
+            )
+        ).await;
 
-        let proper_resp = HttpResponse::Ok()
-            .content_type("text/plain")
-            .body("d14:failure_reason17:Malformed requeste".as_bytes());
-        let req = test::TestRequest::get()
-            .uri("/announce?bad_stuff=123")
-            .to_http_request();
-        let resp = test::read_response(parse_announce(data, req)).unwrap();
+        let proper_resp = "d14:failure_reason17:Malformed requeste".as_bytes();
+        let req = test::TestRequest::with_uri("/announce?bad_stuff=123")
+            .to_request();
+        let resp = test::read_response(&mut app, req).await;
 
         assert_eq!(
-            resp.body().as_ref().unwrap(),
-            proper_resp.body().as_ref().unwrap()
+            resp,
+            proper_resp
         );
     }
 
-    #[test]
-    fn scrape_get_malformed() {
-        let stores = Stores::new("test".to_string());
-        let data = web::Data::new(stores);
-
-        let app = test::init_service(
+    #[actix_rt::test]
+    async fn scrape_get_malformed() {
+        let stores = web::Data::new(Stores::new("test".to_string()));
+        let mut app = test::init_service(
             App::new()
-                .service(
-                    web::scope("/announce")
-                        .register_data(data.clone())
-                        .guard(guard::Header("content-type", "text/plain"))
-                        .route("/", web::get().to(parse_announce)),
-                )
-                .service(
-                    web::scope("/scrape")
-                        .register_data(data.clone())
-                        .guard(guard::Header("content-type", "text/plain"))
-                        .route("/", web::get().to(parse_scrape)),
-                )
-                .default_service(web::route().to(HttpResponse::MethodNotAllowed)),
-        );
+            .service(
+                web::scope("announce")
+                    .app_data(stores.clone())
+                    .route("", web::get().to(parse_announce)),
+            )
+            .service(
+                web::scope("scrape")
+                    .app_data(stores.clone())
+                    .route("", web::get().to(parse_scrape)),
+            )
+            .service(
+                web::scope("/").route("", web::get().to(|| HttpResponse::MethodNotAllowed())),
+            )
+        ).await;
 
-        let proper_resp = HttpResponse::Ok()
-            .content_type("text/plain")
-            .body("d14:failure_reason24:Malformed scrape requeste".as_bytes());
-        let req = test::TestRequest::get()
-            .uri("/scrape?bad_stuff=123")
-            .to_http_request();
-        let resp = test::read_response(parse_scrape(data, req)).unwrap();
+        let proper_resp = "d14:failure_reason24:Malformed scrape requeste".as_bytes();
+        let req = test::TestRequest::with_uri("/scrape?bad_stuff=123")
+            .to_request();
+        let resp = test::read_response(&mut app, req).await;
 
         assert_eq!(
-            resp.body().as_ref().unwrap(),
-            proper_resp.body().as_ref().unwrap()
+            resp,
+            proper_resp
         );
     }
 
-    #[test]
-    fn scrape_get_success() {
+    #[actix_rt::test]
+    async fn scrape_get_success() {
         let stores = Stores::new("test".to_string());
 
         let info_hash1 = "A1B2C3D4E5F6G7H8I9J0".to_string();
@@ -280,33 +273,33 @@ mod tests {
 
         let data = web::Data::new(stores);
 
-        let app = test::init_service(
+        let mut app = test::init_service(
             App::new()
-                .service(
-                    web::scope("/announce")
-                        .data(data.clone())
-                        .guard(guard::Header("content-type", "text/plain"))
-                        .route("/", web::get().to(parse_announce)),
-                )
-                .service(
-                    web::scope("/scrape")
-                        .data(data.clone())
-                        .guard(guard::Header("content-type", "text/plain"))
-                        .route("/", web::get().to(parse_scrape)),
-                )
-                .default_service(web::route().to(HttpResponse::MethodNotAllowed)),
-        );
+            .service(
+                web::scope("announce")
+                    .app_data(data.clone())
+                    .route("", web::get().to(parse_announce)),
+            )
+            .service(
+                web::scope("scrape")
+                    .app_data(data.clone())
+                    .route("", web::get().to(parse_scrape)),
+            )
+            .service(
+                web::scope("/").route("", web::get().to(|| HttpResponse::MethodNotAllowed())),
+            )
+        ).await;
 
         let uri = "/scrape?info_hash=A1B2C3D4E5F6G7H8I9J0\
                    &info_hash=B2C3D4E5F6G7H8I9J0K1";
 
-        let proper_resp = HttpResponse::Ok().content_type("text/plain").body("d5:filesd20:A1B2C3D4E5F6G7H8I9J0d8:completei10e10:downloadedi34e10:incompletei7ee20:B2C3D4E5F6G7H8I9J0K1d8:completei25e10:downloadedi57e10:incompletei19eeee".as_bytes());
-        let req = test::TestRequest::get().uri(uri).to_http_request();
-        let resp = test::read_response(parse_scrape(data, req)).unwrap();
+        let proper_resp = "d5:filesd20:A1B2C3D4E5F6G7H8I9J0d8:completei10e10:downloadedi34e10:incompletei7ee20:B2C3D4E5F6G7H8I9J0K1d8:completei25e10:downloadedi57e10:incompletei19eeee".as_bytes();
+        let req = test::TestRequest::with_uri(uri).to_request();
+        let resp = test::read_response(&mut app, req).await;
 
         assert_eq!(
-            resp.body().as_ref().unwrap(),
-            proper_resp.body().as_ref().unwrap()
+            resp,
+            proper_resp
         );
     }
-}*/
+}

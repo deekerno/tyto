@@ -3,7 +3,7 @@ binding = '0.0.0.0:6666'
 
 [storage]
 backend = 'mysql'
-path = 'mysql://localhost/tyto_test'
+path = 'mysql://ad@localhost/tyto_test'
 
 [bt]
 announce_rate = '1800'

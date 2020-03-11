@@ -9,15 +9,14 @@ use actix_rt;
 use actix_web::{middleware, web, App, HttpResponse, HttpServer};
 use clap::{App as ClapApp, Arg};
 use config::Config;
-use crate::storage::mysql;
-use mysql_async::prelude::*;
+use mysql;
 use pretty_env_logger;
 
 #[macro_use]
 extern crate log;
 
 #[actix_rt::main]
-async fn main() -> Result<(), std::io::Error> {
+async fn main() -> std::io::Result<()> {
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", "INFO");
     }
@@ -43,7 +42,10 @@ async fn main() -> Result<(), std::io::Error> {
         None => Config::load_config("config.toml".to_string()),
     };
 
-    let pool = mysql_async::Pool::new(&config.storage.path);
+    // This will soon be abstracted out into a general loading function
+    let pool = mysql::Pool::new(&config.storage.path).unwrap();
+    let torrents = storage::mysql::get_torrents(pool).unwrap();
+    info!("Number of torrents loaded: {}", torrents.len());
 
     HttpServer::new(move || {
         // Creates a data object to be shared between actor threads

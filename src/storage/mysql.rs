@@ -1,40 +1,41 @@
 use crate::storage;
-use hashbrown::HashMap;
-use mysql_async::prelude::*;
+use mysql::*;
+use mysql::prelude::*;
 
-pub async fn get_torrents(pool: mysql_async::Pool) -> Result<storage::TorrentRecords, mysql_async::error::Error> {
+pub fn get_torrents(pool: Pool) -> Result<storage::TorrentRecords> {
     
-    let conn = pool.get_conn().await?;
+    let mut conn = pool.get_conn()?;
 
     let mut torrents = storage::TorrentRecords::new();
 
-    let result = conn.prep_exec("SELECT info_hash, complete, downloaded, incomplete, balance FROM torrents", ()).await?;
+    let selected_torrents = conn
+        .query_map(
+            "SELECT info_hash, complete, downloaded, incomplete, balance FROM torrents",
+            |(info_hash, complete, downloaded, incomplete, balance)| {
+                storage::Torrent {
+                    info_hash,
+                    complete,
+                    downloaded,
+                    incomplete,
+                    balance
+                }
+            },
+        )?;
 
-    let (_, records) = result.map_and_drop(|row| {
-        let (info_hash, complete, downloaded, incomplete, balance) = mysql_async::from_row(row);
-        storage::Torrent {
-            info_hash,
-            complete,
-            downloaded,
-            incomplete,
-            balance
-        }
-    }).await?;
-
-    for rec in records {
-        torrents.insert(rec.info_hash.clone(), rec);
+    for sel in selected_torrents {
+        torrents.insert(sel.info_hash.clone(), sel);
     }
 
     Ok(torrents)
 }
 
-pub async fn flush_torrents(pool: mysql_async::Pool, torrents: Vec<storage::Torrent>) -> Result<(), mysql_async::error::Error> {
+pub fn flush_torrents(pool: Pool, torrents: Vec<storage::Torrent>) -> Result<()> {
     // Flushing should be accompanied by a lock on peer and torrent records
-    let conn = pool.get_conn().await?;
+    let mut conn = pool.get_conn()?;
 
     let params = torrents.into_iter().map(|torrent| {
         params! {
-            "info_hash" => torrent.info_hash.clone(),
+            "info_hash" => &torrent.info_hash,
             "complete" => torrent.complete,
             "downloaded" => torrent.downloaded,
             "incomplete" => torrent.incomplete,
@@ -42,15 +43,14 @@ pub async fn flush_torrents(pool: mysql_async::Pool, torrents: Vec<storage::Torr
         }
     });
 
-    let conn = conn.batch_exec(r"INSERT INTO torrents (info_hash, complete, downloaded, incomplete, balance)
+    conn.exec_batch(r"INSERT INTO torrents (info_hash, complete, downloaded, incomplete, balance)
                     VALUES (:info_hash, :complete, :downloaded, :incomplete, :balance)
                     ON DUPLICATE KEY UPDATE 
                         complete=VALUES(:complete), 
                         downloaded=VALUES(:downloaded), 
                         incomplete=VALUES(:incomplete), 
                         balance=VALUES(:balance)", 
-                params)
-    .await?;
+                params)?;
 
     Ok(())
 }

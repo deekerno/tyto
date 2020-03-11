@@ -343,8 +343,7 @@ mod tests {
 
     #[test]
     fn announce_bad_request_creation() {
-        let url_string =
-            "info_hash=%90%28%9F%D3M%FC%1C%F8%F3%16%A2h%AD%D85L%853DX\
+        let url_string = "info_hash=%90%28%9F%D3M%FC%1C%F8%F3%16%A2h%AD%D85L%853DX\
              &peer_id=ABCDEFGHIJKLMNOPQRST&port=thisisnotanumber&uploaded=0&downloaded=0\
              &left=727955456&event=started&numwant=100&no_peer_id=1&compact=thisisnotanumber";
 

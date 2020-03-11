@@ -1,26 +1,22 @@
 use crate::storage;
-use mysql::*;
 use mysql::prelude::*;
+use mysql::*;
 
 pub fn get_torrents(pool: Pool) -> Result<storage::TorrentRecords> {
-    
     let mut conn = pool.get_conn()?;
 
     let mut torrents = storage::TorrentRecords::new();
 
-    let selected_torrents = conn
-        .query_map(
-            "SELECT info_hash, complete, downloaded, incomplete, balance FROM torrents",
-            |(info_hash, complete, downloaded, incomplete, balance)| {
-                storage::Torrent {
-                    info_hash,
-                    complete,
-                    downloaded,
-                    incomplete,
-                    balance
-                }
-            },
-        )?;
+    let selected_torrents = conn.query_map(
+        "SELECT info_hash, complete, downloaded, incomplete, balance FROM torrents",
+        |(info_hash, complete, downloaded, incomplete, balance)| storage::Torrent {
+            info_hash,
+            complete,
+            downloaded,
+            incomplete,
+            balance,
+        },
+    )?;
 
     for sel in selected_torrents {
         torrents.insert(sel.info_hash.clone(), sel);
@@ -43,14 +39,16 @@ pub fn flush_torrents(pool: Pool, torrents: Vec<storage::Torrent>) -> Result<()>
         }
     });
 
-    conn.exec_batch(r"INSERT INTO torrents (info_hash, complete, downloaded, incomplete, balance)
+    conn.exec_batch(
+        r"INSERT INTO torrents (info_hash, complete, downloaded, incomplete, balance)
                     VALUES (:info_hash, :complete, :downloaded, :incomplete, :balance)
                     ON DUPLICATE KEY UPDATE 
                         complete=VALUES(:complete), 
                         downloaded=VALUES(:downloaded), 
                         incomplete=VALUES(:incomplete), 
-                        balance=VALUES(:balance)", 
-                params)?;
+                        balance=VALUES(:balance)",
+        params,
+    )?;
 
     Ok(())
 }

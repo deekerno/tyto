@@ -172,15 +172,14 @@ mod tests {
     use super::*;
 
     use actix_service::Service;
-    use actix_web::{http::StatusCode, test, web, App, HttpResponse};
+    use actix_web::{test, web, App, HttpResponse};
 
-    use crate::bittorrent::{Peerv4, Peerv6};
-    use crate::storage::{PeerStore, Stores, Torrent, TorrentMemoryStore};
-    use std::net::{Ipv4Addr, Ipv6Addr};
+    use crate::storage::{Stores, Torrent, TorrentRecords};
 
     #[actix_rt::test]
     async fn index_get_not_allowed() {
-        let stores = web::Data::new(Stores::new("test".to_string()));
+        let records = TorrentRecords::new();
+        let stores = web::Data::new(Stores::new(records));
         let mut app = test::init_service(
             App::new()
                 .service(
@@ -207,7 +206,8 @@ mod tests {
 
     #[actix_rt::test]
     async fn announce_get_malformed() {
-        let stores = web::Data::new(Stores::new("test".to_string()));
+        let records = TorrentRecords::new();
+        let stores = web::Data::new(Stores::new(records));
         let mut app = test::init_service(
             App::new()
                 .service(
@@ -235,7 +235,8 @@ mod tests {
 
     #[actix_rt::test]
     async fn scrape_get_malformed() {
-        let stores = web::Data::new(Stores::new("test".to_string()));
+        let records = TorrentRecords::new();
+        let stores = web::Data::new(Stores::new(records));
         let mut app = test::init_service(
             App::new()
                 .service(
@@ -263,7 +264,8 @@ mod tests {
 
     #[actix_rt::test]
     async fn scrape_get_success() {
-        let stores = Stores::new("test".to_string());
+        let records = TorrentRecords::new();
+        let stores = web::Data::new(Stores::new(records));
 
         let info_hash1 = "A1B2C3D4E5F6G7H8I9J0".to_string();
         let torrent1 = Torrent::new(info_hash1, 10, 34, 7, 10000000);
@@ -277,18 +279,16 @@ mod tests {
             store.insert(torrent2.info_hash.clone(), torrent2);
         }
 
-        let data = web::Data::new(stores);
-
         let mut app = test::init_service(
             App::new()
                 .service(
                     web::scope("announce")
-                        .app_data(data.clone())
+                        .app_data(stores.clone())
                         .route("", web::get().to(parse_announce)),
                 )
                 .service(
                     web::scope("scrape")
-                        .app_data(data.clone())
+                        .app_data(stores.clone())
                         .route("", web::get().to(parse_scrape)),
                 )
                 .service(

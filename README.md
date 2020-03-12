@@ -13,7 +13,7 @@
 
 __Disclaimer:__ This software must only be used in accordance with the laws of your respective country.
 
-_Tyto_ is an open source BitTorrent tracker written in [Rust](https://www.rust-lang.org). It aims to be safe, performant, and distributed.
+_Tyto_ is an open source BitTorrent tracker written in [Rust](https://www.rust-lang.org). It aims to be safe, performant, and rock-solid.
 
 ## Why?
 Tyto was created to facilitate the distribution of (legal) media through the
@@ -24,25 +24,40 @@ many of the newest official standards and de facto extensions in order to
 create a robust and performant distibution system that can be used to legally
 serve many swarms with minimal downtime.
 
-## Current Progress
-The BitTorrent-specific parts of the codebase are finished and ready for testing. These modules do include IPv6 support as described in the BitTorrent specification. There are in-memory storage solutions already implemented, and need to undergo actual testing. There is a search underway for statistics crates that are easily used to analyze the data that will be produced by the storage backends.
-
 ## (Planned) Features
-- Asynchronous operation
-- Multithreading
-- IPv4 and IPv6 support
-- Storage-agnostic backend
-- Distributed fault-tolerance
-- Swarm statistics
-- Private tracker support
+[x] Asynchronous operation
+[x] Multithreading
+[x] IPv4 and IPv6 support
+[ ] Storage-agnostic backend
+[ ] Swarm statistics
+[ ] Private tracker support
+
+## Usage
+### Building
+Tyto requires the [latest stable version of Rust](https://www.rust-lang.org/learn/get-started).
+
+```sh
+$ git clone git@github.com:adcrn/tyto.git
+$ cd tyto
+```
+
+Edit `config.toml` to the desired configuration, and then build the program. Testing is also available.
+
+```sh
+$ cargo test
+$ cargo build --release
+```
+
+### Running
+Make sure that the storage backend and path have been correctly added to the configuration before starting the program. Then start it up! The `-c` flag is also available to provide an alternate path to a configuration file.
+
+```sh
+$ ./target/tyto
+```
+
+By default, Tyto will output information about incoming requests for logging purposes. This can be piped to a file for later inspection. Running the program prefaced by `RUST_LOG=error` will reduce the output to just critical errors.
 
 ## Notes
-### Fault-Tolerance
-A long term goal of the project is to enable high availability through
-distributed fault-tolerance. There are many unforseen events that can take down a tracker
-system, and spatial distribution of nodes running Tyto in a distributed fashion
-would allow for continued uptime as fixes are applied to unreachable nodes.
-
 ### Statistics
 In order to aid with metrics and things like swarm health, each swarm has a
 statistics structure associated with it that can run analyze the swarm for
@@ -56,11 +71,6 @@ their own solutions. In order to facilitate ease of implementation, a
 convenience trait named _PeerStorage_ is required in order to add a solution
 with minimal stress. Tyto does come with an in-memory peer store already
 implemented, and there is a _TorrentStorage_ trait if needed.
-
-### Testing
-This project makes heavy use of testing. All test results for the lastest
-commits can be checked through the build status of the project. To run tests
-locally, clone the repo and run `cargo test`. 
 
 ## License
 MIT

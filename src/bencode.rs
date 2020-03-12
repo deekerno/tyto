@@ -95,7 +95,7 @@ pub fn encode_scrape_response(response: ScrapeResponse) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bittorrent::{AnnounceResponse, Peer, Peerv4, Peerv6, ScrapeResponse};
+    use crate::bittorrent::{AnnounceResponse, Peerv4, Peerv6, ScrapeResponse};
     use std::net::{Ipv4Addr, Ipv6Addr};
 
     #[test]

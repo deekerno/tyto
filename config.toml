@@ -1,9 +1,15 @@
+# This is the network address and port to which Tyto
+# will try to bind. This can be exposed on a server, but it's
+# recommended that Tyto sit behind a web server or load balancer.
 [network]
 binding = '0.0.0.0:6666'
 
+# These are the current backend options: mysql
+# Path is either the database address or file path.
 [storage]
 backend = 'mysql'
 path = 'mysql://ad@localhost/tyto_test'
 
+# These are self-explanatory BitTorrent-specific options.
 [bt]
 announce_rate = '1800'

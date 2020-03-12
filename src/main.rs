@@ -45,13 +45,10 @@ async fn main() -> std::io::Result<()> {
     // This will soon be abstracted out into a general loading function
     let pool = mysql::Pool::new(&config.storage.path).unwrap();
     let torrents = storage::mysql::get_torrents(pool).unwrap();
+    let stores = web::Data::new(storage::Stores::new(torrents.clone()));
     info!("Number of torrents loaded: {}", torrents.len());
 
     HttpServer::new(move || {
-        // Creates a data object to be shared between actor threads
-        // TODO: Needs to read from a configuration
-        let stores = web::Data::new(storage::Stores::new("test".to_string()));
-
         App::new()
             .wrap(middleware::Logger::default())
             .service(

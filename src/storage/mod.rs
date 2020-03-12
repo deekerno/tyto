@@ -1,10 +1,10 @@
 pub mod mysql;
 
-use std::fs;
-use std::io::{BufReader, BufWriter};
+//use std::fs;
+//use std::io::{BufReader, BufWriter};
 use std::sync::Arc;
 
-use bincode::{deserialize_from, serialize_into};
+//use bincode::{deserialize_from, serialize_into};
 use hashbrown::{HashMap, HashSet};
 use parking_lot::RwLock;
 use rand::seq::SliceRandom;
@@ -71,23 +71,27 @@ impl Torrent {
     }
 }
 
-type TorrentRecords = HashMap<String, Torrent>;
+pub type TorrentRecords = HashMap<String, Torrent>;
 
 #[derive(Debug, Clone)]
-pub struct TorrentMemoryStore {
+pub struct TorrentStore {
     pub torrents: Arc<RwLock<TorrentRecords>>,
-    pub path: String,
 }
 
-impl TorrentMemoryStore {
-    pub fn new(path: String) -> Result<TorrentMemoryStore, &'static str> {
-        Ok(TorrentMemoryStore {
-            torrents: Arc::new(RwLock::new(TorrentRecords::new())),
-            path,
+impl TorrentStore {
+    pub fn new(torrent_records: TorrentRecords) -> Result<TorrentStore, ()> {
+        Ok(TorrentStore {
+            torrents: Arc::new(RwLock::new(torrent_records)),
         })
     }
 
-    fn get_torrents(&mut self) {
+    pub fn default() -> Result<TorrentStore, ()> {
+        Ok(TorrentStore {
+            torrents: Arc::new(RwLock::new(TorrentRecords::new())),
+        })
+    }
+
+    /*fn get_torrents(&mut self) {
         let mut torrent_flat_file_reader =
             BufReader::new(fs::File::open(&self.path).expect("Could not open database file"));
         let torrents =
@@ -102,7 +106,7 @@ impl TorrentMemoryStore {
 
         serialize_into(&mut torrent_flat_file_writer, &*torrents)
             .expect("Could not write database to file");
-    }
+    }*/
 
     pub fn get_scrapes(&self, info_hashes: Vec<String>) -> Vec<ScrapeFile> {
         let torrents = self.torrents.read();
@@ -141,7 +145,7 @@ impl TorrentMemoryStore {
         let mut torrents = self.torrents.write();
         if let Some(t) = torrents.get_mut(&info_hash) {
             t.complete += 1;
-            t.incomplete -= 1;
+            t.incomplete = t.incomplete.saturating_sub(1);
         }
     }
 
@@ -155,7 +159,7 @@ impl TorrentMemoryStore {
     /*pub fn undo_snatch(&self, info_hash: String) {
         let mut torrents = self.torrents.write();
         if let Some(t) = torrents.get_mut(&info_hash) {
-            t.incomplete -= 1;
+            t.incomplete = t.incomplete.saturating_sub(1);
         }
     }*/
 }
@@ -286,14 +290,14 @@ impl PeerStore {
 #[derive(Debug, Clone)]
 pub struct Stores {
     pub peer_store: PeerStore,
-    pub torrent_store: TorrentMemoryStore,
+    pub torrent_store: TorrentStore,
 }
 
 impl Stores {
-    pub fn new(torrent_store_path: String) -> Stores {
+    pub fn new(torrent_records: TorrentRecords) -> Stores {
         Stores {
             peer_store: PeerStore::new().unwrap(),
-            torrent_store: TorrentMemoryStore::new(torrent_store_path).unwrap(),
+            torrent_store: TorrentStore::new(torrent_records).unwrap(),
         }
     }
 }
@@ -301,15 +305,16 @@ impl Stores {
 #[cfg(test)]
 mod tests {
 
-    use std::net::{Ipv4Addr, Ipv6Addr};
+    use std::net::Ipv4Addr;
 
-    use crate::bittorrent::{Peer, Peerv4, Peerv6};
+    use crate::bittorrent::{Peer, Peerv4};
 
     use super::*;
 
     #[test]
     fn memory_peer_storage_put_seeder_new_swarm() {
-        let stores = Stores::new("test".to_string());
+        let records = TorrentRecords::new();
+        let stores = Stores::new(records);
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
         let peer = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
@@ -335,7 +340,8 @@ mod tests {
 
     #[test]
     fn memory_peer_storage_put_seeder_prior_swarm() {
-        let stores = Stores::new("test".to_string());
+        let records = TorrentRecords::new();
+        let stores = Stores::new(records);
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
         let peer1 = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
@@ -369,7 +375,8 @@ mod tests {
 
     #[test]
     fn memory_peer_storage_put_leecher_new_swarm() {
-        let stores = Stores::new("test".to_string());
+        let records = TorrentRecords::new();
+        let stores = Stores::new(records);
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
         let peer = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
@@ -395,7 +402,8 @@ mod tests {
 
     #[test]
     fn memory_peer_storage_put_leecher_prior_swarm() {
-        let stores = Stores::new("test".to_string());
+        let records = TorrentRecords::new();
+        let stores = Stores::new(records);
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
         let peer1 = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
@@ -429,7 +437,8 @@ mod tests {
 
     #[test]
     fn memory_peer_storage_remove_seeder() {
-        let stores = Stores::new("test".to_string());
+        let records = TorrentRecords::new();
+        let stores = Stores::new(records);
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
         let peer = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
@@ -459,7 +468,8 @@ mod tests {
 
     #[test]
     fn memory_peer_storage_remove_leecher() {
-        let stores = Stores::new("test".to_string());
+        let records = TorrentRecords::new();
+        let stores = Stores::new(records);
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
         let peer = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
@@ -489,7 +499,8 @@ mod tests {
 
     #[test]
     fn memory_peer_storage_promote_leecher() {
-        let stores = Stores::new("test".to_string());
+        let records = TorrentRecords::new();
+        let stores = Stores::new(records);
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
         let peer = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),

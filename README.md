@@ -25,12 +25,12 @@ create a robust and performant distibution system that can be used to legally
 serve many swarms with minimal downtime.
 
 ## (Planned) Features
-[x] Asynchronous operation
-[x] Multithreading
-[x] IPv4 and IPv6 support
-[ ] Storage-agnostic backend
-[ ] Swarm statistics
-[ ] Private tracker support
+- [x] Asynchronous operation
+- [x] Multithreading
+- [x] IPv4 and IPv6 support
+- [ ] Storage-agnostic backend
+- [ ] Swarm statistics
+- [ ] Private tracker support
 
 ## Usage
 ### Building

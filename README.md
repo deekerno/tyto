@@ -58,7 +58,7 @@ $ ./target/release/tyto
 By default, Tyto will output information about incoming requests for logging purposes. This can be piped to a file for later inspection. Running the program prefaced by `RUST_LOG=error` will reduce the output to just critical errors.
 
 ## Performance
-No rigorous benchmarking has been done on Tyto, but some cursory performance testing has been done. This was done on a 2.3 GHz Intel Core i5 Macbook.
+No rigorous benchmarking has been done on Tyto, but some cursory performance testing has been done. This was done on a 2.3 GHz Intel Core i5 Macbook, and essentially mimicking a situation in which all requests, which each represent a unique peer, are for one torrent and create a lot of churn for the swarm by causing resource contention.
 
 ```
 $ wrk -t3 -c90 -d1m -s wrk_load_test.lua http://localhost:6666

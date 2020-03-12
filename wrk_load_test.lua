@@ -13,7 +13,7 @@ request = function()
     downloaded = math.random(0, 10000)
 
     -- define the path that will search for q=%v 9%v being a random number between 0 and 1000)
-    url_path = "/announce?info_hash=%90%28%9F%D3M%FC%1C%F8%F3%16%A2h%AD%D85L%853DX&peer_id="..randomString.."&port=6881&uploaded="..uploaded.."&downloaded="..downloaded.."&left=727955456&event="..rand_event.."&numwant=30&no_peer_id=1&compact=1"
+    url_path = "/announce?info_hash=3bbc36a0bcae854bd40c4deec639d4afadf65deb&peer_id="..randomString.."&port=6881&uploaded="..uploaded.."&downloaded="..downloaded.."&left=727955456&event="..rand_event.."&numwant=30&no_peer_id=1&compact=1"
 
     -- if we want to print the path generated
     --print(url_path)-- Return the request object with the current URL path

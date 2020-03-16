@@ -9,6 +9,7 @@ pub struct Config {
     pub network: Network,
     pub storage: Storage,
     pub bt: BitTorrent,
+    pub client_approval: ClientApproval,
 }
 
 #[derive(Deserialize)]
@@ -26,6 +27,14 @@ pub struct Storage {
 #[derive(Deserialize)]
 pub struct BitTorrent {
     announce_rate: String,
+}
+
+
+#[derive(Deserialize)]
+pub struct ClientApproval {
+    blacklist_style: bool,
+    versioned: bool,
+    client_list: Vec<String>
 }
 
 impl Default for Network {
@@ -50,6 +59,16 @@ impl Default for BitTorrent {
     fn default() -> Self {
         BitTorrent {
             announce_rate: "1600".to_string(),
+        }
+    }
+}
+
+impl Default for ClientApproval {
+    fn default() -> ClientApproval {
+        ClientApproval {
+            blacklist_style: false,
+            versioned: false,
+            client_list: Vec::new(),
         }
     }
 }
@@ -85,6 +104,7 @@ impl Config {
             &config.storage.backend, &config.storage.path
         );
         info!("Announce interval: {} seconds", &config.bt.announce_rate);
+        info!("Client list: {:?}", &config.client_approval.client_list);
 
         config
     }

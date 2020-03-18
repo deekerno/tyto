@@ -29,12 +29,11 @@ pub struct BitTorrent {
     pub announce_rate: String,
 }
 
-
 #[derive(Deserialize, Clone)]
 pub struct ClientApproval {
     pub blacklist_style: bool,
     pub versioned: bool,
-    pub client_list: Vec<String>
+    pub client_list: Vec<String>,
 }
 
 impl Default for Network {

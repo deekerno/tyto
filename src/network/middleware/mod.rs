@@ -69,7 +69,6 @@ where
     }
 
     fn call(&mut self, req: ServiceRequest) -> Self::Future {
-        // We only need to hook into the `start` for this middleware.
         let request_kv_pairs = form_urlencoded::parse(req.query_string().as_bytes()).into_owned();
         let mut peer_string: String = "".to_string();
 
@@ -87,15 +86,15 @@ where
                 HttpResponse::Ok()
                     .content_type("text/plain")
                     .body(bencoded)
-                    .into_body()
+                    .into_body(),
             )))
         } else {
+            // Most clients do Azureus-style encoding which
+            // looks like '-AZ1234-' followed by a random string
             let client_check = match self.versioned {
                 true => &peer_string[1..7],
                 false => &peer_string[1..3],
             };
-
-            info!("{}", client_check);
 
             if self.blacklist_style {
                 // Check that client isn't part of blacklist.
@@ -108,7 +107,7 @@ where
                         HttpResponse::Ok()
                             .content_type("text/plain")
                             .body(bencoded)
-                            .into_body()
+                            .into_body(),
                     )))
                 } else {
                     Either::Left(self.service.call(req))
@@ -126,11 +125,10 @@ where
                         HttpResponse::Ok()
                             .content_type("text/plain")
                             .body(bencoded)
-                            .into_body()
+                            .into_body(),
                     )))
                 }
             }
         }
     }
 }
-

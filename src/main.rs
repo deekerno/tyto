@@ -53,9 +53,9 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(middleware::Logger::default())
             .wrap(network::middleware::ClientApproval::new(
-                    config.client_approval.blacklist_style,
-                    config.client_approval.versioned,
-                    config.client_approval.client_list.clone()
+                config.client_approval.blacklist_style,
+                config.client_approval.versioned,
+                config.client_approval.client_list.clone(),
             ))
             .service(
                 web::scope("announce")

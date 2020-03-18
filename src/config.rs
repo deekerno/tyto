@@ -4,7 +4,7 @@ use std::io::Read;
 use serde::Deserialize;
 use toml;
 
-#[derive(Default, Deserialize)]
+#[derive(Default, Deserialize, Clone)]
 pub struct Config {
     pub network: Network,
     pub storage: Storage,
@@ -12,29 +12,29 @@ pub struct Config {
     pub client_approval: ClientApproval,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct Network {
     pub binding: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct Storage {
     pub backend: String,
     pub path: String,
     pub password: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct BitTorrent {
-    announce_rate: String,
+    pub announce_rate: String,
 }
 
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct ClientApproval {
-    blacklist_style: bool,
-    versioned: bool,
-    client_list: Vec<String>
+    pub blacklist_style: bool,
+    pub versioned: bool,
+    pub client_list: Vec<String>
 }
 
 impl Default for Network {

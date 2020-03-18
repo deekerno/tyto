@@ -41,6 +41,7 @@ async fn main() -> std::io::Result<()> {
         Some(path) => Config::load_config(path.to_string()),
         None => Config::load_config("config.toml".to_string()),
     };
+    let binding = config.network.binding.clone();
 
     // This will soon be abstracted out into a general loading function
     let pool = mysql::Pool::new(&config.storage.path).unwrap();
@@ -51,6 +52,11 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
+            .wrap(network::middleware::ClientApproval::new(
+                    config.client_approval.blacklist_style,
+                    config.client_approval.versioned,
+                    config.client_approval.client_list.clone()
+            ))
             .service(
                 web::scope("announce")
                     .app_data(stores.clone())
@@ -63,7 +69,7 @@ async fn main() -> std::io::Result<()> {
             )
             .service(web::scope("/").route("", web::get().to(|| HttpResponse::MethodNotAllowed())))
     })
-    .bind(config.network.binding)?
+    .bind(binding)?
     .run()
     .await
 }

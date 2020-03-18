@@ -122,7 +122,7 @@ impl AnnounceRequest {
                         }
                     }
                 }
-                "peer" => peer_string = value,
+                "peer_id" => peer_string = value,
                 "port" => match value.parse::<u16>() {
                     Ok(n) => port = n,
                     _ => return Err(AnnounceResponse::failure("Malformed request".to_string())),

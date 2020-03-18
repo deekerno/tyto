@@ -1,3 +1,5 @@
+pub mod middleware;
+
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 
 use crate::bencode;

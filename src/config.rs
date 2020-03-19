@@ -31,6 +31,7 @@ pub struct BitTorrent {
 
 #[derive(Deserialize, Clone)]
 pub struct ClientApproval {
+    pub enabled: bool,
     pub blacklist_style: bool,
     pub versioned: bool,
     pub client_list: Vec<String>,
@@ -65,6 +66,7 @@ impl Default for BitTorrent {
 impl Default for ClientApproval {
     fn default() -> ClientApproval {
         ClientApproval {
+            enabled: false,
             blacklist_style: false,
             versioned: false,
             client_list: Vec::new(),

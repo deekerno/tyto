@@ -34,9 +34,6 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                         }
                     }
 
-                    peers.sort();
-                    peers6.sort();
-
                     let (complete, incomplete) =
                         data.torrent_store.get_announce_stats(parsed_req.info_hash);
 
@@ -66,9 +63,6 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                         }
                     }
 
-                    peers.sort();
-                    peers6.sort();
-
                     let (complete, incomplete) =
                         data.torrent_store.get_announce_stats(parsed_req.info_hash);
 
@@ -94,9 +88,6 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                             Peer::V6(p) => peers6.push(p),
                         }
                     }
-
-                    peers.sort();
-                    peers6.sort();
 
                     let (complete, incomplete) =
                         data.torrent_store.get_announce_stats(parsed_req.info_hash);
@@ -124,9 +115,6 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                             Peer::V6(p) => peers6.push(p),
                         }
                     }
-
-                    peers.sort();
-                    peers6.sort();
 
                     let (complete, incomplete) =
                         data.torrent_store.get_announce_stats(parsed_req.info_hash);

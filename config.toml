@@ -26,7 +26,7 @@ announce_rate = '1800'
 # are used to denoted the client and version number. Please make sure
 # that the list is consistent.
 [client_approval]
-enabled = true
+enabled = false
 blacklist_style = false
 versioned = false
 client_list = [

@@ -23,7 +23,7 @@ async fn main() -> std::io::Result<()> {
     pretty_env_logger::init_timed();
 
     let matches = ClapApp::new("tyto")
-        .version("0.1")
+        .version("0.2.1")
         .author("Alexander Decurnou. <ad@alx.xyz>")
         .about("A BitTorrent tracker that aims to be distributed, fast, and fault-tolerant.")
         .arg(
@@ -53,14 +53,13 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(middleware::Logger::default())
             .wrap(middleware::Condition::new(
-                    config.client_approval.enabled,
-                    network::middleware::ClientApproval::new(
-                        config.client_approval.blacklist_style,
-                        config.client_approval.versioned,
-                        config.client_approval.client_list.clone(),
-                    )
-                )
-            )
+                config.client_approval.enabled,
+                network::middleware::ClientApproval::new(
+                    config.client_approval.blacklist_style,
+                    config.client_approval.versioned,
+                    config.client_approval.client_list.clone(),
+                ),
+            ))
             .service(
                 web::scope("announce")
                     .app_data(stores.clone())

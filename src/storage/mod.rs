@@ -19,12 +19,6 @@ impl PeerList {
         PeerList(Vec::new())
     }
 
-    fn add_from_swarm(&mut self, elems: &HashSet<Peer>) {
-        for peer in elems.iter().cloned() {
-            self.0.push(peer);
-        }
-    }
-
     fn give_random(&mut self, numwant: u32) -> Vec<Peer> {
         // If the total amount of peers is less than numwant,
         // just return the entire list of peers
@@ -275,8 +269,10 @@ impl PeerStore {
 
         let store = self.records.read();
         if let Some(sw) = store.get(&info_hash) {
-            peer_list.add_from_swarm(&sw.seeders);
-            peer_list.add_from_swarm(&sw.leechers);
+            let mut seeds: Vec<Peer> = sw.seeders.iter().map(|p| p.clone()).collect();
+            let mut leeches: Vec<Peer> = sw.leechers.iter().map(|p| p.clone()).collect();
+            peer_list.0.append(&mut seeds);
+            peer_list.0.append(&mut leeches);
         }
 
         // Randomized bunch of seeders and leechers

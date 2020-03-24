@@ -19,3 +19,8 @@ Cargo.lock
 
 .*.*.swp
 .*.swp
+.DS_Store
+flamegraph.pl
+out.stacks
+pretty-graph.svg
+stackcollapse.pl

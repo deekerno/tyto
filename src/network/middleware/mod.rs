@@ -3,8 +3,8 @@ use std::task::{Context, Poll};
 use actix_service::{Service, Transform};
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::{Error, HttpResponse};
+use dashmap::DashSet;
 use futures::future::{ok, Either, Ready};
-use hashbrown::HashSet;
 use url::form_urlencoded;
 
 use crate::bencode;
@@ -13,7 +13,7 @@ use crate::bittorrent::AnnounceResponse;
 pub struct ClientApproval {
     blacklist_style: bool,
     versioned: bool,
-    list: HashSet<String>,
+    list: DashSet<String>,
 }
 
 impl ClientApproval {
@@ -51,7 +51,7 @@ pub struct ClientApprovalMiddleware<S> {
     service: S,
     blacklist_style: bool,
     versioned: bool,
-    list: HashSet<String>,
+    list: DashSet<String>,
 }
 
 impl<S, B> Service for ClientApprovalMiddleware<S>
@@ -73,9 +73,8 @@ where
         let mut peer_string: String = "".to_string();
 
         for (k, value) in request_kv_pairs {
-            match k.as_str() {
-                "peer_id" => peer_string = value,
-                _ => {}
+            if let "peer_id" = k.as_str() {
+                peer_string = value
             }
         }
 
@@ -91,9 +90,10 @@ where
         } else {
             // Most clients do Azureus-style encoding which
             // looks like '-AZ1234-' followed by a random string
-            let client_check = match self.versioned {
-                true => &peer_string[1..7],
-                false => &peer_string[1..3],
+            let client_check = if self.versioned {
+                &peer_string[1..7]
+            } else {
+                &peer_string[1..3]
             };
 
             if self.blacklist_style {

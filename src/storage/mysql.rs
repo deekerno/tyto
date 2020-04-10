@@ -5,7 +5,7 @@ use mysql::*;
 pub fn get_torrents(pool: Pool) -> Result<storage::TorrentRecords> {
     let mut conn = pool.get_conn()?;
 
-    let mut torrents = storage::TorrentRecords::new();
+    let torrents = storage::TorrentRecords::new();
 
     let selected_torrents = conn.query_map(
         "SELECT info_hash, complete, downloaded, incomplete, balance FROM torrents",

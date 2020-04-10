@@ -264,9 +264,14 @@ mod tests {
         let torrent2 = Torrent::new(info_hash2, 25, 57, 19, 20000000);
 
         {
-            let mut store = stores.torrent_store.torrents.write();
-            store.insert(torrent1.info_hash.clone(), torrent1);
-            store.insert(torrent2.info_hash.clone(), torrent2);
+            stores
+                .torrent_store
+                .torrents
+                .insert(torrent1.info_hash.clone(), torrent1);
+            stores
+                .torrent_store
+                .torrents
+                .insert(torrent2.info_hash.clone(), torrent2);
         }
 
         let mut app = test::init_service(

@@ -2,8 +2,7 @@ pub mod mysql;
 
 use std::sync::Arc;
 
-use hashbrown::{HashMap, HashSet};
-use parking_lot::RwLock;
+use dashmap::{DashMap, DashSet};
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 
@@ -62,23 +61,23 @@ impl Torrent {
     }
 }
 
-pub type TorrentRecords = HashMap<String, Torrent>;
+pub type TorrentRecords = DashMap<String, Torrent>;
 
 #[derive(Debug, Clone)]
 pub struct TorrentStore {
-    pub torrents: Arc<RwLock<TorrentRecords>>,
+    pub torrents: Arc<TorrentRecords>,
 }
 
 impl TorrentStore {
     pub fn new(torrent_records: TorrentRecords) -> Result<TorrentStore, ()> {
         Ok(TorrentStore {
-            torrents: Arc::new(RwLock::new(torrent_records)),
+            torrents: Arc::new(torrent_records),
         })
     }
 
     pub fn default() -> Result<TorrentStore, ()> {
         Ok(TorrentStore {
-            torrents: Arc::new(RwLock::new(TorrentRecords::new())),
+            torrents: Arc::new(TorrentRecords::new()),
         })
     }
 
@@ -100,11 +99,10 @@ impl TorrentStore {
     }*/
 
     pub fn get_scrapes(&self, info_hashes: Vec<String>) -> Vec<ScrapeFile> {
-        let torrents = self.torrents.read();
         let mut scrapes = Vec::new();
 
         for info_hash in info_hashes {
-            if let Some(t) = torrents.get(&info_hash) {
+            if let Some(t) = self.torrents.get(&info_hash) {
                 scrapes.push(ScrapeFile {
                     info_hash: info_hash.clone(),
                     complete: t.complete,
@@ -120,11 +118,10 @@ impl TorrentStore {
 
     // Announces only require complete and incomplete
     pub fn get_announce_stats(&self, info_hash: String) -> (u32, u32) {
-        let torrents = self.torrents.read();
         let mut complete: u32 = 0;
         let mut incomplete: u32 = 0;
 
-        if let Some(t) = torrents.get(&info_hash) {
+        if let Some(t) = self.torrents.get(&info_hash) {
             complete = t.complete;
             incomplete = t.incomplete;
         }
@@ -133,16 +130,14 @@ impl TorrentStore {
     }
 
     pub fn new_seed(&self, info_hash: String) {
-        let mut torrents = self.torrents.write();
-        if let Some(t) = torrents.get_mut(&info_hash) {
+        if let Some(mut t) = self.torrents.get_mut(&info_hash) {
             t.complete += 1;
             t.incomplete = t.incomplete.saturating_sub(1);
         }
     }
 
     pub fn new_leech(&self, info_hash: String) {
-        let mut torrents = self.torrents.write();
-        if let Some(t) = torrents.get_mut(&info_hash) {
+        if let Some(mut t) = self.torrents.get_mut(&info_hash) {
             t.incomplete += 1;
         }
     }
@@ -159,15 +154,15 @@ impl TorrentStore {
 // Or should Hash be implemented for the peer types?
 #[derive(Debug, Clone)]
 pub struct Swarm {
-    pub seeders: HashSet<Peer>,
-    pub leechers: HashSet<Peer>,
+    pub seeders: DashSet<Peer>,
+    pub leechers: DashSet<Peer>,
 }
 
 impl Swarm {
     fn new() -> Swarm {
         Swarm {
-            seeders: HashSet::new(),
-            leechers: HashSet::new(),
+            seeders: DashSet::new(),
+            leechers: DashSet::new(),
         }
     }
 
@@ -188,7 +183,7 @@ impl Swarm {
     }
 
     fn promote_leecher(&mut self, peer: Peer) {
-        match self.leechers.take(&peer) {
+        match self.leechers.remove(&peer) {
             Some(leecher) => {
                 self.seeders.insert(leecher);
             }
@@ -199,66 +194,61 @@ impl Swarm {
     }
 }
 
-type PeerRecords = HashMap<String, Swarm>;
+type PeerRecords = DashMap<String, Swarm>;
 
 // Sharable between threads, multiple readers, one writer
 #[derive(Debug, Clone)]
 pub struct PeerStore {
-    pub records: Arc<RwLock<PeerRecords>>,
+    pub records: Arc<PeerRecords>,
 }
 
 impl PeerStore {
     pub fn new() -> Result<PeerStore, &'static str> {
         Ok(PeerStore {
-            records: Arc::new(RwLock::new(PeerRecords::new())),
+            records: Arc::new(PeerRecords::new()),
         })
     }
 
     pub fn put_seeder(&self, info_hash: String, peer: Peer) {
-        let mut store = self.records.write();
-        match store.get_mut(&info_hash) {
-            Some(sw) => {
+        match self.records.get_mut(&info_hash) {
+            Some(mut sw) => {
                 sw.add_seeder(peer);
             }
             None => {
                 let mut sw = Swarm::new();
                 sw.add_seeder(peer);
-                store.insert(info_hash, sw);
+                self.records.insert(info_hash, sw);
             }
         }
     }
 
     pub fn remove_seeder(&self, info_hash: String, peer: Peer) {
-        let mut store = self.records.write();
-        if let Some(sw) = store.get_mut(&info_hash) {
+        if let Some(mut sw) = self.records.get_mut(&info_hash) {
             sw.remove_seeder(peer);
         }
     }
 
     pub fn put_leecher(&self, info_hash: String, peer: Peer) {
-        let mut store = self.records.write();
-        match store.get_mut(&info_hash) {
-            Some(sw) => {
+        match self.records.get_mut(&info_hash) {
+            Some(mut sw) => {
                 sw.add_leecher(peer);
             }
             None => {
                 let mut sw = Swarm::new();
                 sw.add_leecher(peer);
-                store.insert(info_hash, sw);
+                self.records.insert(info_hash, sw);
             }
         }
     }
 
     pub fn remove_leecher(&self, info_hash: String, peer: Peer) {
-        let mut store = self.records.write();
-        if let Some(sw) = store.get_mut(&info_hash) {
+        if let Some(mut sw) = self.records.get_mut(&info_hash) {
             sw.remove_leecher(peer);
         }
     }
 
     pub fn promote_leecher(&self, info_hash: String, peer: Peer) {
-        let mut store = self.records.write();
-        if let Some(sw) = store.get_mut(&info_hash) {
+        if let Some(mut sw) = self.records.get_mut(&info_hash) {
             sw.promote_leecher(peer);
         }
     }
@@ -267,8 +257,7 @@ impl PeerStore {
     pub fn get_peers(&self, info_hash: String, numwant: u32) -> Vec<Peer> {
         let mut peer_list = PeerList::new();
 
-        let store = self.records.read();
-        if let Some(sw) = store.get(&info_hash) {
+        if let Some(sw) = self.records.get(&info_hash) {
             let mut seeds: Vec<Peer> = sw.seeders.iter().map(|p| p.clone()).collect();
             let mut leeches: Vec<Peer> = sw.leechers.iter().map(|p| p.clone()).collect();
             peer_list.0.append(&mut seeds);
@@ -322,7 +311,6 @@ mod tests {
             stores
                 .peer_store
                 .records
-                .read()
                 .get(&info_hash)
                 .unwrap()
                 .seeders
@@ -357,7 +345,6 @@ mod tests {
             stores
                 .peer_store
                 .records
-                .read()
                 .get(&info_hash)
                 .unwrap()
                 .seeders
@@ -384,7 +371,6 @@ mod tests {
             stores
                 .peer_store
                 .records
-                .read()
                 .get(&info_hash)
                 .unwrap()
                 .leechers
@@ -419,7 +405,6 @@ mod tests {
             stores
                 .peer_store
                 .records
-                .read()
                 .get(&info_hash)
                 .unwrap()
                 .leechers
@@ -450,7 +435,6 @@ mod tests {
             stores
                 .peer_store
                 .records
-                .read()
                 .get(&info_hash)
                 .unwrap()
                 .seeders
@@ -481,7 +465,6 @@ mod tests {
             stores
                 .peer_store
                 .records
-                .read()
                 .get(&info_hash)
                 .unwrap()
                 .leechers
@@ -512,7 +495,6 @@ mod tests {
             stores
                 .peer_store
                 .records
-                .read()
                 .get(&info_hash)
                 .unwrap()
                 .seeders

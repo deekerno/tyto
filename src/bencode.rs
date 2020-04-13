@@ -97,6 +97,7 @@ mod tests {
     use super::*;
     use crate::bittorrent::{AnnounceResponse, Peerv4, Peerv6, ScrapeResponse};
     use std::net::{Ipv4Addr, Ipv6Addr};
+    use std::time::Instant;
 
     #[test]
     fn announce_response_encoding() {
@@ -104,11 +105,13 @@ mod tests {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::LOCALHOST,
             port: 6893,
+            last_announced: Instant::now(),
         };
         let peerv4_2 = Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::BROADCAST,
             port: 6894,
+            last_announced: Instant::now(),
         };
 
         let mut peers: Vec<Peerv4> = Vec::new();
@@ -121,6 +124,7 @@ mod tests {
                 0x2001, 0x0db8, 0x85a3, 0x0000, 0x0000, 0x8a2e, 0x0370, 0x7334,
             ),
             port: 6681,
+            last_announced: Instant::now(),
         };
         let peerv6_2 = Peerv6 {
             peer_id: "ABCDEFGHIJKLMNOPZZZZ".to_string(),
@@ -128,6 +132,7 @@ mod tests {
                 0xfe80, 0x0000, 0x0000, 0x0000, 0x0202, 0xb3ff, 0xfe1e, 0x8329,
             ),
             port: 6699,
+            last_announced: Instant::now(),
         };
 
         let mut peers6: Vec<Peerv6> = Vec::new();

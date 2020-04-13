@@ -304,6 +304,7 @@ impl Stores {
 mod tests {
 
     use std::net::Ipv4Addr;
+    use std::time::Instant;
 
     use crate::bittorrent::{Peer, Peerv4};
 
@@ -318,6 +319,7 @@ mod tests {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::LOCALHOST,
             port: 6893,
+            last_announced: Instant::now(),
         });
 
         stores
@@ -345,6 +347,7 @@ mod tests {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::LOCALHOST,
             port: 6893,
+            last_announced: Instant::now(),
         });
 
         stores.peer_store.put_seeder(info_hash.clone(), peer1);
@@ -353,6 +356,7 @@ mod tests {
             peer_id: "TSRQPONMLKJIHGFEDCBA".to_string(),
             ip: Ipv4Addr::LOCALHOST,
             port: 6881,
+            last_announced: Instant::now(),
         });
 
         stores
@@ -380,6 +384,7 @@ mod tests {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::LOCALHOST,
             port: 6893,
+            last_announced: Instant::now(),
         });
 
         stores
@@ -407,6 +412,7 @@ mod tests {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::LOCALHOST,
             port: 6893,
+            last_announced: Instant::now(),
         });
 
         stores.peer_store.put_seeder(info_hash.clone(), peer1);
@@ -415,6 +421,7 @@ mod tests {
             peer_id: "TSRQPONMLKJIHGFEDCBA".to_string(),
             ip: Ipv4Addr::LOCALHOST,
             port: 6881,
+            last_announced: Instant::now(),
         });
 
         stores
@@ -442,6 +449,7 @@ mod tests {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::LOCALHOST,
             port: 6893,
+            last_announced: Instant::now(),
         });
 
         stores
@@ -473,6 +481,7 @@ mod tests {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::LOCALHOST,
             port: 6893,
+            last_announced: Instant::now(),
         });
 
         stores
@@ -504,6 +513,7 @@ mod tests {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::LOCALHOST,
             port: 6893,
+            last_announced: Instant::now(),
         });
 
         stores

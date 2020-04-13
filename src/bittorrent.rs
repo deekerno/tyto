@@ -3,7 +3,9 @@
 // https://wiki.theory.org/index.php/BitTorrentSpecification
 
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::time::Instant;
 
 use bytes::BufMut;
 use percent_encoding;
@@ -18,18 +20,20 @@ trait Compact {
 
 // These two peer types could probably be implemented more elegantly
 // with a trait, but there's only two types right now, so it's not a lot of work
-#[derive(Clone, Eq, Ord, PartialEq, PartialOrd, Hash, Debug)]
+#[derive(Clone, Eq, Ord, PartialOrd, Debug)]
 pub struct Peerv4 {
     pub peer_id: String, // This should be 20 bytes in length
     pub ip: Ipv4Addr,
     pub port: u16,
+    pub last_announced: Instant,
 }
 
-#[derive(Clone, Eq, Ord, PartialEq, PartialOrd, Hash, Debug)]
+#[derive(Clone, Eq, Ord, PartialOrd, Debug)]
 pub struct Peerv6 {
     pub peer_id: String, // This should be 20 bytes in length
     pub ip: Ipv6Addr,
     pub port: u16,
+    pub last_announced: Instant,
 }
 
 impl Compact for Peerv4 {
@@ -56,6 +60,34 @@ impl Compact for Peerv6 {
         full_compact_peer.put_slice(&self.port.to_be_bytes());
 
         full_compact_peer
+    }
+}
+
+impl Hash for Peerv4 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.peer_id.hash(state);
+        self.ip.hash(state);
+        self.port.hash(state);
+    }
+}
+
+impl Hash for Peerv6 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.peer_id.hash(state);
+        self.ip.hash(state);
+        self.port.hash(state);
+    }
+}
+
+impl PartialEq for Peerv4 {
+    fn eq(&self, other: &Self) -> bool {
+        self.peer_id == other.peer_id && self.ip == other.ip && self.port == other.port
+    }
+}
+
+impl PartialEq for Peerv6 {
+    fn eq(&self, other: &Self) -> bool {
+        self.peer_id == other.peer_id && self.ip == other.ip && self.port == other.port
     }
 }
 
@@ -187,11 +219,13 @@ impl AnnounceRequest {
                 peer_id: peer_string,
                 ip: i,
                 port,
+                last_announced: Instant::now(),
             }),
             IpAddr::V6(i) => Peer::V6(Peerv6 {
                 peer_id: peer_string,
                 ip: i,
                 port,
+                last_announced: Instant::now(),
             }),
         };
 
@@ -333,6 +367,7 @@ impl ScrapeResponse {
 #[cfg(test)]
 mod tests {
     use std::net::{Ipv4Addr, Ipv6Addr};
+    use std::time::Instant;
 
     use super::{
         AnnounceRequest, AnnounceResponse, Compact, Peer, Peerv4, Peerv6, ScrapeFile,
@@ -369,11 +404,13 @@ mod tests {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::LOCALHOST,
             port: 6893,
+            last_announced: Instant::now(),
         };
         let peerv4_2 = Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::BROADCAST,
             port: 6894,
+            last_announced: Instant::now(),
         };
 
         let mut peers: Vec<Peerv4> = Vec::new();
@@ -386,6 +423,7 @@ mod tests {
                 0x2001, 0x0db8, 0x85a3, 0x0000, 0x0000, 0x8a2e, 0x0370, 0x7334,
             ),
             port: 6681,
+            last_announced: Instant::now(),
         };
         let peerv6_2 = Peerv6 {
             peer_id: "ABCDEFGHIJKLMNOPZZZZ".to_string(),
@@ -393,6 +431,7 @@ mod tests {
                 0xfe80, 0x0000, 0x0000, 0x0000, 0x0202, 0xb3ff, 0xfe1e, 0x8329,
             ),
             port: 6699,
+            last_announced: Instant::now(),
         };
 
         let mut peers6: Vec<Peerv6> = Vec::new();
@@ -410,6 +449,7 @@ mod tests {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
             ip: Ipv4Addr::LOCALHOST,
             port: 6681,
+            last_announced: Instant::now(),
         });
 
         let mut localhost_port_byte_string = vec![];
@@ -429,6 +469,7 @@ mod tests {
                 0x2001, 0x0db8, 0x85a3, 0x0000, 0x0000, 0x8a2e, 0x0370, 0x7334,
             ),
             port: 6681,
+            last_announced: Instant::now(),
         });
 
         let mut localhost_port_byte_string = vec![];

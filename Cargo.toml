@@ -5,6 +5,7 @@ authors = ["Alexander Decurnou <ad@alx.xyz>"]
 edition = "2018"
 
 [dependencies]
+actix = "0.9.0"
 actix-rt = "1.0.0"
 actix-service = "1.0.5"
 actix-web = "2.0.0"
@@ -16,6 +17,7 @@ env = "*"
 futures = "0.3"
 log = "*"
 mysql = "*"
+parking_lot = "*"
 percent-encoding = "*"
 pretty_env_logger = "*"
 rand = "*"
@@ -24,6 +26,6 @@ serde = { version = "1.0", features = ["derive", "rc"] }
 toml = "*"
 url = "*"
 
-[dependencies.dashmap]
+[dependencies.hashbrown]
 version = "*"
-features = ["serde"]
+features = ["serde", "rayon"]

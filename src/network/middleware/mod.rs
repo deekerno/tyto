@@ -3,8 +3,8 @@ use std::task::{Context, Poll};
 use actix_service::{Service, Transform};
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::{Error, HttpResponse};
-use dashmap::DashSet;
 use futures::future::{ok, Either, Ready};
+use hashbrown::HashSet;
 use url::form_urlencoded;
 
 use crate::bencode;
@@ -13,7 +13,7 @@ use crate::bittorrent::AnnounceResponse;
 pub struct ClientApproval {
     blacklist_style: bool,
     versioned: bool,
-    list: DashSet<String>,
+    list: HashSet<String>,
 }
 
 impl ClientApproval {
@@ -51,7 +51,7 @@ pub struct ClientApprovalMiddleware<S> {
     service: S,
     blacklist_style: bool,
     versioned: bool,
-    list: DashSet<String>,
+    list: HashSet<String>,
 }
 
 impl<S, B> Service for ClientApprovalMiddleware<S>

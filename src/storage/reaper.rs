@@ -15,13 +15,13 @@ pub struct Reaper {
 
 impl Reaper {
     pub fn new(
-        interval: Duration,
-        peer_timeout: Duration,
+        interval_secs: u64,
+        peer_timeout_secs: u64,
         state: web::Data<storage::Stores>,
     ) -> Reaper {
         Reaper {
-            interval,
-            peer_timeout,
+            interval: Duration::new(interval_secs, 0),
+            peer_timeout: Duration::new(peer_timeout_secs, 0),
             state,
         }
     }
@@ -71,6 +71,7 @@ impl Actor for Reaper {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
+        info!("Reaper is now lurking...");
         // This will go through all of the swarms and remove
         // any peers that have not announced in a defined time
         IntervalFunc::new(self.interval, Self::reap_peers)

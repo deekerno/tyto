@@ -37,16 +37,22 @@ async fn main() -> std::io::Result<()> {
         )
         .get_matches();
 
+    // Parse arguments and attempt to parse configuration file
     let config_path = matches.value_of("config");
     let config = match config_path {
         Some(path) => Config::load_config(path.to_string()),
         None => Config::load_config("config.toml".to_string()),
     };
+
+    // Copy and cloning up here to avoid errors for moved values
     let binding = config.network.binding.clone();
     let reap_interval = config.bt.reap_interval;
     let peer_timeout = config.bt.peer_timeout;
 
-    // This will soon be abstracted out into a general loading function
+    // TODO: abstract into a general loading function
+    // TODO: add support to pass mysql password
+    // Collect torrents from desired storage
+    // backend and instantiate data stores.
     let pool = mysql::Pool::new(&config.storage.path).unwrap();
     let torrents = storage::mysql::get_torrents(pool).unwrap();
     let stores = web::Data::new(storage::Stores::new(torrents.clone()));
@@ -55,7 +61,10 @@ async fn main() -> std::io::Result<()> {
 
     let server = HttpServer::new(move || {
         App::new()
+            // Log all requests to stdout
             .wrap(middleware::Logger::default())
+            // If enabled, filter requests
+            // by client ID and reject or accept
             .wrap(middleware::Condition::new(
                 config.client_approval.enabled,
                 network::middleware::ClientApproval::new(
@@ -79,9 +88,11 @@ async fn main() -> std::io::Result<()> {
     .bind(binding)?
     .run();
 
+    // Start reaper in its own thread
     storage::reaper::Reaper::create(|_ctx: &mut Context<storage::reaper::Reaper>| {
         storage::reaper::Reaper::new(reap_interval, peer_timeout, reaper_store_clone)
     });
 
+    // Start server
     server.await
 }

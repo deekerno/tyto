@@ -26,6 +26,8 @@ impl ToBencode for AnnounceResponse {
     const MAX_DEPTH: usize = 5;
 
     fn encode(&self, encoder: SingleItemEncoder) -> Result<(), Error> {
+        // If there is a failure reason present,
+        // then nothing else gets encoded
         match &self.failure_reason {
             Some(reason) => {
                 encoder.emit_dict(|mut e| {
@@ -62,6 +64,8 @@ impl ToBencode for ScrapeResponse {
     const MAX_DEPTH: usize = 5;
 
     fn encode(&self, encoder: SingleItemEncoder) -> Result<(), Error> {
+        // If there is a failure reason present,
+        // then nothing else gets encoded
         match &self.failure_reason {
             Some(reason) => {
                 encoder.emit_dict(|mut e| {

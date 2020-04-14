@@ -63,6 +63,13 @@ impl Compact for Peerv6 {
     }
 }
 
+/*
+ * Proper peer hashing is important as the entire peer storage capability
+ * depends upon it. Peer reaping requires a last_announced time, which
+ * can't be used for hashing as the same client with a different announce
+ * time would be conisdered different. Thus, a non-derived implementation
+ * of Hash (and its required trait PartialEq) are necessary.
+ */
 impl Hash for Peerv4 {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.peer_id.hash(state);
@@ -144,6 +151,8 @@ impl AnnounceRequest {
         let mut key = None;
         let mut trackerid = None;
 
+        // If any request does not properly encode these paramters,
+        // return an AnnounceFailure to be sent to the client
         for (k, value) in request_kv_pairs {
             match k.as_str() {
                 "info_hash" => {

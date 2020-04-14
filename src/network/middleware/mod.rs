@@ -78,6 +78,7 @@ where
             }
         }
 
+        // If a client's peer string is empty, this is a Bad Thing
         if peer_string.is_empty() {
             let failure = AnnounceResponse::failure("Unsupported Client".to_string());
             let bencoded = bencode::encode_announce_response(failure);

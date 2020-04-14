@@ -8,25 +8,34 @@ use crate::storage::Stores;
 use crate::util::Event;
 
 // This will eventually be read from the configuration YAML.
-const INTERVAL: u32 = 3600;
+const INTERVAL: u32 = 1800;
 
 pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl Responder {
     let announce_request = AnnounceRequest::new(req.query_string(), req.connection_info().remote());
 
     match announce_request {
         Ok(parsed_req) => {
+            // There are only three types of events that lead to
+            // actual change between swarms on the storage layer
             match parsed_req.event {
+                // Started should be sent whenever a client
+                // starts or resumes the leeching process
                 Event::Started => {
                     data.peer_store
                         .put_leecher(parsed_req.info_hash.clone(), parsed_req.peer);
                     data.torrent_store.new_leech(parsed_req.info_hash.clone());
 
+                    // Get randomized peer list
                     let peer_list = data
                         .peer_store
                         .get_peers(parsed_req.info_hash.clone(), parsed_req.numwant.unwrap());
                     let mut peers = Vec::new();
                     let mut peers6 = Vec::new();
 
+                    // Separate peers by protocol version. There are no
+                    // guarantees on the presence of either in the list.
+                    // It's entirely possible (but unlikely) to have peers
+                    // of only one protocol type.
                     for peer in peer_list {
                         match peer {
                             Peer::V4(p) => peers.push(p),
@@ -37,14 +46,18 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                     let (complete, incomplete) =
                         data.torrent_store.get_announce_stats(parsed_req.info_hash);
 
+                    // Associate all the requisite data together and
+                    // respond with the bencoded version of the data
                     let response =
                         AnnounceResponse::new(INTERVAL, complete, incomplete, peers, peers6);
                     let bencoded = bencode::encode_announce_response(response.unwrap());
                     HttpResponse::Ok().content_type("text/plain").body(bencoded)
                 }
+
+                // Stopped should be sent when a client stops seed or leeching
                 Event::Stopped => {
-                    // TODO: Need to make sure that peer is decremented from whichever swarm it
-                    // came from
+                    // Calling the remove methods ensure that the peer
+                    // is removed from a swarm regardless of where it is
                     data.peer_store
                         .remove_seeder(parsed_req.info_hash.clone(), parsed_req.peer.clone());
                     data.peer_store
@@ -71,6 +84,9 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                     let bencoded = bencode::encode_announce_response(response.unwrap());
                     HttpResponse::Ok().content_type("text/plain").body(bencoded)
                 }
+
+                // Completed should be sent when a peer receives 100%
+                // of the data associated with a particular torrent
                 Event::Completed => {
                     data.peer_store
                         .promote_leecher(parsed_req.info_hash.clone(), parsed_req.peer);
@@ -97,11 +113,15 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                     let bencoded = bencode::encode_announce_response(response.unwrap());
                     HttpResponse::Ok().content_type("text/plain").body(bencoded)
                 }
+
+                // None should only be sent if
+                // there is no change in snatch state
                 Event::None => {
-                    // This is just a way to ensure that a leecher is added if
-                    // the client doesn't send an event
+                    // This updates a peer if it is present in either swarm.
+                    // It is intended that a client correctly send its states.
+                    // If a client starts out with this event, it will never be added.
                     data.peer_store
-                        .put_leecher(parsed_req.info_hash.clone(), parsed_req.peer);
+                        .update_peer(parsed_req.info_hash.clone(), parsed_req.peer);
 
                     let peer_list = data
                         .peer_store

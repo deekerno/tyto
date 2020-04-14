@@ -5,6 +5,7 @@ pub mod network;
 pub mod storage;
 pub mod util;
 
+use actix::prelude::*;
 use actix_rt;
 use actix_web::{middleware, web, App, HttpResponse, HttpServer};
 use clap::{App as ClapApp, Arg};
@@ -42,14 +43,17 @@ async fn main() -> std::io::Result<()> {
         None => Config::load_config("config.toml".to_string()),
     };
     let binding = config.network.binding.clone();
+    let reap_interval = config.bt.reap_interval;
+    let peer_timeout = config.bt.peer_timeout;
 
     // This will soon be abstracted out into a general loading function
     let pool = mysql::Pool::new(&config.storage.path).unwrap();
     let torrents = storage::mysql::get_torrents(pool).unwrap();
     let stores = web::Data::new(storage::Stores::new(torrents.clone()));
+    let reaper_store_clone = stores.clone();
     info!("Number of torrents loaded: {}", torrents.len());
 
-    HttpServer::new(move || {
+    let server = HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
             .wrap(middleware::Condition::new(
@@ -73,6 +77,11 @@ async fn main() -> std::io::Result<()> {
             .service(web::scope("/").route("", web::get().to(|| HttpResponse::MethodNotAllowed())))
     })
     .bind(binding)?
-    .run()
-    .await
+    .run();
+
+    storage::reaper::Reaper::create(|_ctx: &mut Context<storage::reaper::Reaper>| {
+        storage::reaper::Reaper::new(reap_interval, peer_timeout, reaper_store_clone)
+    });
+
+    server.await
 }

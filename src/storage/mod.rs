@@ -65,6 +65,9 @@ impl Torrent {
 
 pub type TorrentRecords = HashMap<String, Torrent>;
 
+// TorrentStore needs to be wrapped in a RwLock or other exclusion
+// primitive in order to prevent data races. This is further wrapped
+// in an atomic reference counter in order to make it thread-safe.
 #[derive(Debug, Clone)]
 pub struct TorrentStore {
     pub torrents: Arc<RwLock<TorrentRecords>>,
@@ -82,23 +85,6 @@ impl TorrentStore {
             torrents: Arc::new(RwLock::new(TorrentRecords::new())),
         })
     }
-
-    /*fn get_torrents(&mut self) {
-        let mut torrent_flat_file_reader =
-            BufReader::new(fs::File::open(&self.path).expect("Could not open database file"));
-        let torrents =
-            deserialize_from(&mut torrent_flat_file_reader).expect("Could not deserialize");
-        self.torrents = Arc::new(RwLock::new(torrents));
-    }
-
-    fn flush_torrents(&self) {
-        let torrents = self.torrents.read();
-        let mut torrent_flat_file_writer =
-            BufWriter::new(fs::File::create(&self.path).expect("Could not write to database path"));
-
-        serialize_into(&mut torrent_flat_file_writer, &*torrents)
-            .expect("Could not write database to file");
-    }*/
 
     pub fn get_scrapes(&self, info_hashes: Vec<String>) -> Vec<ScrapeFile> {
         let torrents = self.torrents.read();
@@ -156,14 +142,15 @@ impl TorrentStore {
     }*/
 }
 
-// Should these be byte strings instead of just peer types?
-// Or should Hash be implemented for the peer types?
 #[derive(Debug, Clone)]
 pub struct Swarm {
     pub seeders: HashSet<Peer>,
     pub leechers: HashSet<Peer>,
 }
 
+// Swarm actually holds the peers for each torrent. The structure
+// is essentially a wrapper around HashSet with a tiny bit of logic.
+// The more complex logic around peer retrieval takes place in PeerStore.
 impl Swarm {
     fn new() -> Swarm {
         Swarm {
@@ -173,13 +160,24 @@ impl Swarm {
     }
 
     fn add_seeder(&mut self, peer: Peer) {
-        if !self.seeders.insert(peer.clone()) {
+        self.seeders.insert(peer);
+    }
+
+    fn add_leecher(&mut self, peer: Peer) {
+        self.leechers.insert(peer);
+    }
+
+    // The update methods ensure that peers that
+    // continue to announce have accurate announce times
+    // in order to prevent errant peer reaping
+    fn update_seeder(&mut self, peer: Peer) {
+        if self.seeders.contains(&peer) {
             self.seeders.replace(peer);
         }
     }
 
-    fn add_leecher(&mut self, peer: Peer) {
-        if !self.leechers.insert(peer.clone()) {
+    fn update_leecher(&mut self, peer: Peer) {
+        if self.leechers.contains(&peer) {
             self.leechers.replace(peer);
         }
     }
@@ -206,7 +204,9 @@ impl Swarm {
 
 type PeerRecords = HashMap<String, Swarm>;
 
-// Sharable between threads, multiple readers, one writer
+// PeerStore needs to be wrapped in a RwLock or other exclusion
+// primitive in order to prevent data races. This is further wrapped
+// in an atomic reference counter in order to make it thread-safe.
 #[derive(Debug, Clone)]
 pub struct PeerStore {
     pub records: Arc<RwLock<PeerRecords>>,
@@ -265,6 +265,14 @@ impl PeerStore {
         let mut store = self.records.write();
         if let Some(sw) = store.get_mut(&info_hash) {
             sw.promote_leecher(peer);
+        }
+    }
+
+    pub fn update_peer(&self, info_hash: String, peer: Peer) {
+        let mut store = self.records.write();
+        if let Some(sw) = store.get_mut(&info_hash) {
+            sw.update_seeder(peer.clone());
+            sw.update_leecher(peer);
         }
     }
 
@@ -532,6 +540,46 @@ mod tests {
                 .unwrap()
                 .seeders
                 .contains(&peer),
+            true
+        );
+    }
+
+    #[test]
+    fn memory_peer_storage_update_peer() {
+        let records = TorrentRecords::new();
+        let stores = Stores::new(records);
+        let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
+        let peer = Peer::V4(Peerv4 {
+            peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
+            ip: Ipv4Addr::LOCALHOST,
+            port: 6893,
+            last_announced: Instant::now(),
+        });
+
+        stores
+            .peer_store
+            .put_leecher(info_hash.clone(), peer.clone());
+
+        let peer2 = Peer::V4(Peerv4 {
+            peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
+            ip: Ipv4Addr::LOCALHOST,
+            port: 6893,
+            last_announced: Instant::now(),
+        });
+
+        stores
+            .peer_store
+            .update_peer(info_hash.clone(), peer2.clone());
+
+        assert_eq!(
+            stores
+                .peer_store
+                .records
+                .read()
+                .get(&info_hash)
+                .unwrap()
+                .leechers
+                .contains(&peer2),
             true
         );
     }

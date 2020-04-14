@@ -12,7 +12,9 @@ path = 'mysql://ad@localhost/tyto_test'
 
 # These are self-explanatory BitTorrent-specific options.
 [bt]
-announce_rate = '1800'
+announce_rate = 1800
+peer_timeout = 7200
+reap_interval = 1800
 
 # This is where one can control the ability of certain clients to
 # interface with the tracker. Setting 'blacklist_style' to true will 

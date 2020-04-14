@@ -26,7 +26,9 @@ pub struct Storage {
 
 #[derive(Deserialize, Clone)]
 pub struct BitTorrent {
-    pub announce_rate: String,
+    pub announce_rate: u64,
+    pub peer_timeout: u64,
+    pub reap_interval: u64,
 }
 
 #[derive(Deserialize, Clone)]
@@ -58,7 +60,9 @@ impl Default for Storage {
 impl Default for BitTorrent {
     fn default() -> Self {
         BitTorrent {
-            announce_rate: "1600".to_string(),
+            announce_rate: 1800,
+            peer_timeout: 7200,
+            reap_interval: 1800,
         }
     }
 }
@@ -95,7 +99,7 @@ impl Config {
             Ok(t) => t,
             _ => {
                 error!("Could not parse config file; loading default config...");
-                return Config::default();
+                Config::default()
             }
         };
 
@@ -105,6 +109,10 @@ impl Config {
             &config.storage.backend, &config.storage.path
         );
         info!("Announce interval: {} seconds", &config.bt.announce_rate);
+        info!(
+            "Reaping peers older than {} seconds at {}-sec interval",
+            &config.bt.peer_timeout, &config.bt.reap_interval
+        );
         info!("Client list: {:?}", &config.client_approval.client_list);
 
         config

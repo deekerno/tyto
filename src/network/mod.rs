@@ -22,13 +22,17 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                 // starts or resumes the leeching process
                 Event::Started => {
                     data.peer_store
-                        .put_leecher(parsed_req.info_hash.clone(), parsed_req.peer);
-                    data.torrent_store.new_leech(parsed_req.info_hash.clone());
+                        .put_leecher(parsed_req.info_hash.clone(), parsed_req.peer)
+                        .await;
+                    data.torrent_store
+                        .new_leech(parsed_req.info_hash.clone())
+                        .await;
 
                     // Get randomized peer list
                     let peer_list = data
                         .peer_store
-                        .get_peers(parsed_req.info_hash.clone(), parsed_req.numwant.unwrap());
+                        .get_peers(parsed_req.info_hash.clone(), parsed_req.numwant.unwrap())
+                        .await;
                     let mut peers = Vec::new();
                     let mut peers6 = Vec::new();
 
@@ -43,8 +47,10 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                         }
                     }
 
-                    let (complete, incomplete) =
-                        data.torrent_store.get_announce_stats(parsed_req.info_hash);
+                    let (complete, incomplete) = data
+                        .torrent_store
+                        .get_announce_stats(parsed_req.info_hash)
+                        .await;
 
                     // Associate all the requisite data together and
                     // respond with the bencoded version of the data
@@ -59,13 +65,16 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                     // Calling the remove methods ensure that the peer
                     // is removed from a swarm regardless of where it is
                     data.peer_store
-                        .remove_seeder(parsed_req.info_hash.clone(), parsed_req.peer.clone());
+                        .remove_seeder(parsed_req.info_hash.clone(), parsed_req.peer.clone())
+                        .await;
                     data.peer_store
-                        .remove_leecher(parsed_req.info_hash.clone(), parsed_req.peer);
+                        .remove_leecher(parsed_req.info_hash.clone(), parsed_req.peer)
+                        .await;
 
                     let peer_list = data
                         .peer_store
-                        .get_peers(parsed_req.info_hash.clone(), parsed_req.numwant.unwrap());
+                        .get_peers(parsed_req.info_hash.clone(), parsed_req.numwant.unwrap())
+                        .await;
                     let mut peers = Vec::new();
                     let mut peers6 = Vec::new();
 
@@ -76,8 +85,10 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                         }
                     }
 
-                    let (complete, incomplete) =
-                        data.torrent_store.get_announce_stats(parsed_req.info_hash);
+                    let (complete, incomplete) = data
+                        .torrent_store
+                        .get_announce_stats(parsed_req.info_hash)
+                        .await;
 
                     let response =
                         AnnounceResponse::new(INTERVAL, complete, incomplete, peers, peers6);
@@ -89,12 +100,16 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                 // of the data associated with a particular torrent
                 Event::Completed => {
                     data.peer_store
-                        .promote_leecher(parsed_req.info_hash.clone(), parsed_req.peer);
-                    data.torrent_store.new_seed(parsed_req.info_hash.clone());
+                        .promote_leecher(parsed_req.info_hash.clone(), parsed_req.peer)
+                        .await;
+                    data.torrent_store
+                        .new_seed(parsed_req.info_hash.clone())
+                        .await;
 
                     let peer_list = data
                         .peer_store
-                        .get_peers(parsed_req.info_hash.clone(), parsed_req.numwant.unwrap());
+                        .get_peers(parsed_req.info_hash.clone(), parsed_req.numwant.unwrap())
+                        .await;
                     let mut peers = Vec::new();
                     let mut peers6 = Vec::new();
 
@@ -105,8 +120,10 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                         }
                     }
 
-                    let (complete, incomplete) =
-                        data.torrent_store.get_announce_stats(parsed_req.info_hash);
+                    let (complete, incomplete) = data
+                        .torrent_store
+                        .get_announce_stats(parsed_req.info_hash)
+                        .await;
 
                     let response =
                         AnnounceResponse::new(INTERVAL, complete, incomplete, peers, peers6);
@@ -121,11 +138,13 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                     // It is intended that a client correctly send its states.
                     // If a client starts out with this event, it will never be added.
                     data.peer_store
-                        .update_peer(parsed_req.info_hash.clone(), parsed_req.peer);
+                        .update_peer(parsed_req.info_hash.clone(), parsed_req.peer)
+                        .await;
 
                     let peer_list = data
                         .peer_store
-                        .get_peers(parsed_req.info_hash.clone(), parsed_req.numwant.unwrap());
+                        .get_peers(parsed_req.info_hash.clone(), parsed_req.numwant.unwrap())
+                        .await;
                     let mut peers = Vec::new();
                     let mut peers6 = Vec::new();
 
@@ -136,8 +155,10 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                         }
                     }
 
-                    let (complete, incomplete) =
-                        data.torrent_store.get_announce_stats(parsed_req.info_hash);
+                    let (complete, incomplete) = data
+                        .torrent_store
+                        .get_announce_stats(parsed_req.info_hash)
+                        .await;
 
                     let response =
                         AnnounceResponse::new(INTERVAL, complete, incomplete, peers, peers6);
@@ -159,7 +180,7 @@ pub async fn parse_scrape(data: web::Data<Stores>, req: HttpRequest) -> impl Res
     let scrape_request = ScrapeRequest::new(req.query_string());
     match scrape_request {
         Ok(parsed_req) => {
-            let scrape_files = data.torrent_store.get_scrapes(parsed_req.info_hashes);
+            let scrape_files = data.torrent_store.get_scrapes(parsed_req.info_hashes).await;
             let mut scrape_response = ScrapeResponse::new().unwrap();
 
             for file in scrape_files {
@@ -284,7 +305,7 @@ mod tests {
         let torrent2 = Torrent::new(info_hash2, 25, 57, 19, 20000000);
 
         {
-            let mut store = stores.torrent_store.torrents.write();
+            let mut store = stores.torrent_store.torrents.write().await;
             store.insert(torrent1.info_hash.clone(), torrent1);
             store.insert(torrent2.info_hash.clone(), torrent2);
         }

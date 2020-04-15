@@ -4,9 +4,9 @@ pub mod reaper;
 use std::sync::Arc;
 
 use hashbrown::{HashMap, HashSet};
-use parking_lot::RwLock;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 
 use crate::bittorrent::Peer;
 use crate::bittorrent::ScrapeFile;
@@ -86,8 +86,8 @@ impl TorrentStore {
         })
     }
 
-    pub fn get_scrapes(&self, info_hashes: Vec<String>) -> Vec<ScrapeFile> {
-        let torrents = self.torrents.read();
+    pub async fn get_scrapes(&self, info_hashes: Vec<String>) -> Vec<ScrapeFile> {
+        let torrents = self.torrents.read().await;
         let mut scrapes = Vec::new();
 
         for info_hash in info_hashes {
@@ -106,8 +106,8 @@ impl TorrentStore {
     }
 
     // Announces only require complete and incomplete
-    pub fn get_announce_stats(&self, info_hash: String) -> (u32, u32) {
-        let torrents = self.torrents.read();
+    pub async fn get_announce_stats(&self, info_hash: String) -> (u32, u32) {
+        let torrents = self.torrents.read().await;
         let mut complete: u32 = 0;
         let mut incomplete: u32 = 0;
 
@@ -119,16 +119,16 @@ impl TorrentStore {
         (complete, incomplete)
     }
 
-    pub fn new_seed(&self, info_hash: String) {
-        let mut torrents = self.torrents.write();
+    pub async fn new_seed(&self, info_hash: String) {
+        let mut torrents = self.torrents.write().await;
         if let Some(t) = torrents.get_mut(&info_hash) {
             t.complete += 1;
             t.incomplete = t.incomplete.saturating_sub(1);
         }
     }
 
-    pub fn new_leech(&self, info_hash: String) {
-        let mut torrents = self.torrents.write();
+    pub async fn new_leech(&self, info_hash: String) {
+        let mut torrents = self.torrents.write().await;
         if let Some(t) = torrents.get_mut(&info_hash) {
             t.incomplete += 1;
         }
@@ -219,8 +219,8 @@ impl PeerStore {
         })
     }
 
-    pub fn put_seeder(&self, info_hash: String, peer: Peer) {
-        let mut store = self.records.write();
+    pub async fn put_seeder(&self, info_hash: String, peer: Peer) {
+        let mut store = self.records.write().await;
         match store.get_mut(&info_hash) {
             Some(sw) => {
                 sw.add_seeder(peer);
@@ -233,15 +233,15 @@ impl PeerStore {
         }
     }
 
-    pub fn remove_seeder(&self, info_hash: String, peer: Peer) {
-        let mut store = self.records.write();
+    pub async fn remove_seeder(&self, info_hash: String, peer: Peer) {
+        let mut store = self.records.write().await;
         if let Some(sw) = store.get_mut(&info_hash) {
             sw.remove_seeder(peer);
         }
     }
 
-    pub fn put_leecher(&self, info_hash: String, peer: Peer) {
-        let mut store = self.records.write();
+    pub async fn put_leecher(&self, info_hash: String, peer: Peer) {
+        let mut store = self.records.write().await;
         match store.get_mut(&info_hash) {
             Some(sw) => {
                 sw.add_leecher(peer);
@@ -254,22 +254,22 @@ impl PeerStore {
         }
     }
 
-    pub fn remove_leecher(&self, info_hash: String, peer: Peer) {
-        let mut store = self.records.write();
+    pub async fn remove_leecher(&self, info_hash: String, peer: Peer) {
+        let mut store = self.records.write().await;
         if let Some(sw) = store.get_mut(&info_hash) {
             sw.remove_leecher(peer);
         }
     }
 
-    pub fn promote_leecher(&self, info_hash: String, peer: Peer) {
-        let mut store = self.records.write();
+    pub async fn promote_leecher(&self, info_hash: String, peer: Peer) {
+        let mut store = self.records.write().await;
         if let Some(sw) = store.get_mut(&info_hash) {
             sw.promote_leecher(peer);
         }
     }
 
-    pub fn update_peer(&self, info_hash: String, peer: Peer) {
-        let mut store = self.records.write();
+    pub async fn update_peer(&self, info_hash: String, peer: Peer) {
+        let mut store = self.records.write().await;
         if let Some(sw) = store.get_mut(&info_hash) {
             sw.update_seeder(peer.clone());
             sw.update_leecher(peer);
@@ -277,10 +277,10 @@ impl PeerStore {
     }
 
     // Returns a randomized vector of peers to be returned to client
-    pub fn get_peers(&self, info_hash: String, numwant: u32) -> Vec<Peer> {
+    pub async fn get_peers(&self, info_hash: String, numwant: u32) -> Vec<Peer> {
         let mut peer_list = PeerList::new();
 
-        let store = self.records.read();
+        let store = self.records.read().await;
         if let Some(sw) = store.get(&info_hash) {
             let mut seeds: Vec<Peer> = sw.seeders.iter().map(|p| p.clone()).collect();
             let mut leeches: Vec<Peer> = sw.leechers.iter().map(|p| p.clone()).collect();
@@ -318,8 +318,8 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn memory_peer_storage_put_seeder_new_swarm() {
+    #[tokio::test]
+    async fn memory_peer_storage_put_seeder_new_swarm() {
         let records = TorrentRecords::new();
         let stores = Stores::new(records);
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
@@ -332,12 +332,14 @@ mod tests {
 
         stores
             .peer_store
-            .put_seeder(info_hash.clone(), peer.clone());
+            .put_seeder(info_hash.clone(), peer.clone())
+            .await;
         assert_eq!(
             stores
                 .peer_store
                 .records
                 .read()
+                .await
                 .get(&info_hash)
                 .unwrap()
                 .seeders
@@ -346,8 +348,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn memory_peer_storage_put_seeder_prior_swarm() {
+    #[tokio::test]
+    async fn memory_peer_storage_put_seeder_prior_swarm() {
         let records = TorrentRecords::new();
         let stores = Stores::new(records);
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
@@ -358,7 +360,7 @@ mod tests {
             last_announced: Instant::now(),
         });
 
-        stores.peer_store.put_seeder(info_hash.clone(), peer1);
+        stores.peer_store.put_seeder(info_hash.clone(), peer1).await;
 
         let peer2 = Peer::V4(Peerv4 {
             peer_id: "TSRQPONMLKJIHGFEDCBA".to_string(),
@@ -369,12 +371,14 @@ mod tests {
 
         stores
             .peer_store
-            .put_seeder(info_hash.clone(), peer2.clone());
+            .put_seeder(info_hash.clone(), peer2.clone())
+            .await;
         assert_eq!(
             stores
                 .peer_store
                 .records
                 .read()
+                .await
                 .get(&info_hash)
                 .unwrap()
                 .seeders
@@ -383,8 +387,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn memory_peer_storage_put_leecher_new_swarm() {
+    #[tokio::test]
+    async fn memory_peer_storage_put_leecher_new_swarm() {
         let records = TorrentRecords::new();
         let stores = Stores::new(records);
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
@@ -397,12 +401,14 @@ mod tests {
 
         stores
             .peer_store
-            .put_leecher(info_hash.clone(), peer.clone());
+            .put_leecher(info_hash.clone(), peer.clone())
+            .await;
         assert_eq!(
             stores
                 .peer_store
                 .records
                 .read()
+                .await
                 .get(&info_hash)
                 .unwrap()
                 .leechers
@@ -411,8 +417,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn memory_peer_storage_put_leecher_prior_swarm() {
+    #[tokio::test]
+    async fn memory_peer_storage_put_leecher_prior_swarm() {
         let records = TorrentRecords::new();
         let stores = Stores::new(records);
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
@@ -423,7 +429,7 @@ mod tests {
             last_announced: Instant::now(),
         });
 
-        stores.peer_store.put_seeder(info_hash.clone(), peer1);
+        stores.peer_store.put_seeder(info_hash.clone(), peer1).await;
 
         let peer2 = Peer::V4(Peerv4 {
             peer_id: "TSRQPONMLKJIHGFEDCBA".to_string(),
@@ -434,12 +440,14 @@ mod tests {
 
         stores
             .peer_store
-            .put_leecher(info_hash.clone(), peer2.clone());
+            .put_leecher(info_hash.clone(), peer2.clone())
+            .await;
         assert_eq!(
             stores
                 .peer_store
                 .records
                 .read()
+                .await
                 .get(&info_hash)
                 .unwrap()
                 .leechers
@@ -448,8 +456,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn memory_peer_storage_remove_seeder() {
+    #[tokio::test]
+    async fn memory_peer_storage_remove_seeder() {
         let records = TorrentRecords::new();
         let stores = Stores::new(records);
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
@@ -462,16 +470,19 @@ mod tests {
 
         stores
             .peer_store
-            .put_seeder(info_hash.clone(), peer.clone());
+            .put_seeder(info_hash.clone(), peer.clone())
+            .await;
 
         stores
             .peer_store
-            .remove_seeder(info_hash.clone(), peer.clone());
+            .remove_seeder(info_hash.clone(), peer.clone())
+            .await;
         assert_eq!(
             stores
                 .peer_store
                 .records
                 .read()
+                .await
                 .get(&info_hash)
                 .unwrap()
                 .seeders
@@ -480,8 +491,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn memory_peer_storage_remove_leecher() {
+    #[tokio::test]
+    async fn memory_peer_storage_remove_leecher() {
         let records = TorrentRecords::new();
         let stores = Stores::new(records);
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
@@ -494,16 +505,19 @@ mod tests {
 
         stores
             .peer_store
-            .put_leecher(info_hash.clone(), peer.clone());
+            .put_leecher(info_hash.clone(), peer.clone())
+            .await;
 
         stores
             .peer_store
-            .remove_leecher(info_hash.clone(), peer.clone());
+            .remove_leecher(info_hash.clone(), peer.clone())
+            .await;
         assert_eq!(
             stores
                 .peer_store
                 .records
                 .read()
+                .await
                 .get(&info_hash)
                 .unwrap()
                 .leechers
@@ -512,8 +526,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn memory_peer_storage_promote_leecher() {
+    #[tokio::test]
+    async fn memory_peer_storage_promote_leecher() {
         let records = TorrentRecords::new();
         let stores = Stores::new(records);
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
@@ -526,16 +540,19 @@ mod tests {
 
         stores
             .peer_store
-            .put_leecher(info_hash.clone(), peer.clone());
+            .put_leecher(info_hash.clone(), peer.clone())
+            .await;
         stores
             .peer_store
-            .promote_leecher(info_hash.clone(), peer.clone());
+            .promote_leecher(info_hash.clone(), peer.clone())
+            .await;
 
         assert_eq!(
             stores
                 .peer_store
                 .records
                 .read()
+                .await
                 .get(&info_hash)
                 .unwrap()
                 .seeders
@@ -544,8 +561,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn memory_peer_storage_update_peer() {
+    #[tokio::test]
+    async fn memory_peer_storage_update_peer() {
         let records = TorrentRecords::new();
         let stores = Stores::new(records);
         let info_hash = "A1B2C3D4E5F6G7H8I9J0".to_string();
@@ -558,7 +575,8 @@ mod tests {
 
         stores
             .peer_store
-            .put_leecher(info_hash.clone(), peer.clone());
+            .put_leecher(info_hash.clone(), peer.clone())
+            .await;
 
         let peer2 = Peer::V4(Peerv4 {
             peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
@@ -569,13 +587,15 @@ mod tests {
 
         stores
             .peer_store
-            .update_peer(info_hash.clone(), peer2.clone());
+            .update_peer(info_hash.clone(), peer2.clone())
+            .await;
 
         assert_eq!(
             stores
                 .peer_store
                 .records
                 .read()
+                .await
                 .get(&info_hash)
                 .unwrap()
                 .leechers

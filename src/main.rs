@@ -62,7 +62,7 @@ async fn main() -> std::io::Result<()> {
     let server = HttpServer::new(move || {
         App::new()
             // Log all requests to stdout
-            .wrap(middleware::Logger::default())
+            //.wrap(middleware::Logger::default())
             // If enabled, filter requests
             // by client ID and reject or accept
             .wrap(middleware::Condition::new(

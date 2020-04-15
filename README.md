@@ -57,21 +57,6 @@ $ ./target/release/tyto
 
 By default, Tyto will output information about incoming requests for logging purposes. This can be piped to a file for later inspection. Running the program prefaced by `RUST_LOG=error` will reduce the output to just critical errors.
 
-## Notes
-### Statistics
-In order to aid with metrics and things like swarm health, each swarm has a
-statistics structure associated with it that can run analyze the swarm for
-anamolies and calculate certain measures. All methodologies are extensively
-commented, and can easily be extended.
-
-### Storage Backend
-Tyto has been developed to be _storage-agnostic_. It does not require one to
-lock themselves to a certain storage solution, and users are free to implement
-their own solutions. In order to facilitate ease of implementation, a
-convenience trait named _PeerStorage_ is required in order to add a solution
-with minimal stress. Tyto does come with an in-memory peer store already
-implemented, and there is a _TorrentStorage_ trait if needed.
-
 ## License
 MIT
 

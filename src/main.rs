@@ -12,6 +12,7 @@ use clap::{App as ClapApp, Arg};
 use config::Config;
 use mysql;
 use pretty_env_logger;
+use storage::janitor::Janitor;
 
 #[macro_use]
 extern crate log;
@@ -48,15 +49,16 @@ async fn main() -> std::io::Result<()> {
     let binding = config.network.binding.clone();
     let reap_interval = config.bt.reap_interval;
     let peer_timeout = config.bt.peer_timeout;
+    let flush_interval = config.bt.flush_interval;
 
     // TODO: abstract into a general loading function
     // TODO: add support to pass mysql password
     // Collect torrents from desired storage
     // backend and instantiate data stores.
     let pool = mysql::Pool::new(&config.storage.path).unwrap();
-    let torrents = storage::mysql::get_torrents(pool).unwrap();
+    let torrents = storage::mysql::get_torrents(pool.clone()).unwrap();
     let stores = web::Data::new(storage::Stores::new(torrents.clone()));
-    let reaper_store_clone = stores.clone();
+    let janitor_store_clone = stores.clone();
     info!("Number of torrents loaded: {}", torrents.len());
 
     let server = HttpServer::new(move || {
@@ -88,9 +90,15 @@ async fn main() -> std::io::Result<()> {
     .bind(binding)?
     .run();
 
-    // Start reaper in its own thread
-    storage::reaper::Reaper::create(|_ctx: &mut Context<storage::reaper::Reaper>| {
-        storage::reaper::Reaper::new(reap_interval, peer_timeout, reaper_store_clone)
+    // Start janitor in its own thread
+    Janitor::create(|_ctx: &mut Context<Janitor>| {
+        Janitor::new(
+            reap_interval,
+            peer_timeout,
+            flush_interval,
+            janitor_store_clone,
+            pool,
+        )
     });
 
     // Start server

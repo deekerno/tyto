@@ -29,7 +29,7 @@ pub fn flush_torrents(pool: Pool, torrents: Vec<storage::Torrent>) -> Result<()>
     // Flushing should be accompanied by a lock on peer and torrent records
     let mut conn = pool.get_conn()?;
 
-    let params = torrents.into_iter().map(|torrent| {
+    let params = torrents.iter().map(|torrent| {
         params! {
             "info_hash" => &torrent.info_hash,
             "complete" => torrent.complete,
@@ -43,10 +43,10 @@ pub fn flush_torrents(pool: Pool, torrents: Vec<storage::Torrent>) -> Result<()>
         r"INSERT INTO torrents (info_hash, complete, downloaded, incomplete, balance)
                     VALUES (:info_hash, :complete, :downloaded, :incomplete, :balance)
                     ON DUPLICATE KEY UPDATE 
-                        complete=VALUES(:complete), 
-                        downloaded=VALUES(:downloaded), 
-                        incomplete=VALUES(:incomplete), 
-                        balance=VALUES(:balance)",
+                        complete=:complete, 
+                        downloaded=:downloaded, 
+                        incomplete=:incomplete, 
+                        balance=:balance",
         params,
     )?;
 

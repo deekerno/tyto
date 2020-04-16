@@ -5,35 +5,42 @@ use std::time::Duration;
 
 use actix::prelude::*;
 use actix_web::web;
+use mysql::*;
 
 #[derive(Clone)]
-pub struct Reaper {
-    interval: Duration,
+pub struct Janitor {
+    reap_interval: Duration,
     peer_timeout: Duration,
+    flush_interval: Duration,
     state: web::Data<storage::Stores>,
+    pool: Pool,
 }
 
-impl Reaper {
+impl Janitor {
     pub fn new(
-        interval_secs: u64,
+        reap_interval: u64,
         peer_timeout_secs: u64,
+        flush_interval: u64,
         state: web::Data<storage::Stores>,
-    ) -> Reaper {
-        Reaper {
-            interval: Duration::new(interval_secs, 0),
+        pool: Pool,
+    ) -> Janitor {
+        Janitor {
+            reap_interval: Duration::new(reap_interval, 0),
             peer_timeout: Duration::new(peer_timeout_secs, 0),
+            flush_interval: Duration::new(flush_interval, 0),
             state,
+            pool,
         }
     }
 
     // Had to clone self to avoid wacky lifetime error
-    fn reap_peers(&mut self, ctx: &mut Context<Self>) {
+    fn clear_peers(&mut self, ctx: &mut Context<Self>) {
         let self2 = self.clone();
         ctx.spawn(actix::fut::wrap_future(async move {
-            info!("Reaping peers...");
+            info!("Clearing away stale peers...");
 
-            let mut seeds_reaped = 0;
-            let mut leeches_reaped = 0;
+            let mut seeds_cleared = 0;
+            let mut leeches_cleared = 0;
 
             let info_hashes: Vec<String> = self2
                 .state
@@ -66,26 +73,55 @@ impl Reaper {
                         Peer::V6(p) => p.last_announced.elapsed() < self2.peer_timeout,
                     });
 
-                    seeds_reaped += seeds_1 - swarm.seeders.len();
-                    leeches_reaped += leeches_1 - swarm.leechers.len();
+                    seeds_cleared += seeds_1 - swarm.seeders.len();
+                    leeches_cleared += leeches_1 - swarm.leechers.len();
                 }
             }
 
             info!(
-                "Reaped {} seeders and {} leechers.",
-                seeds_reaped, leeches_reaped
+                "Cleared {} seeders and {} leechers.",
+                seeds_cleared, leeches_cleared
             );
+        }));
+    }
+
+    // Had to clone self to avoid wacky lifetime error
+    fn flush(&mut self, ctx: &mut Context<Self>) {
+        let self2 = self.clone();
+        ctx.spawn(actix::fut::wrap_future(async move {
+            info!("Flushing torrents to database...");
+
+            let torrents: Vec<storage::Torrent> = self2
+                .state
+                .torrent_store
+                .torrents
+                .read()
+                .await
+                .iter()
+                .map(|(_, torrent)| torrent.clone())
+                .collect();
+
+            let num_torrents = torrents.len();
+
+            let _result = storage::mysql::flush_torrents(self2.pool, torrents);
+
+            info!("Flushed {} torrents.", num_torrents);
         }));
     }
 }
 
-impl Actor for Reaper {
+impl Actor for Janitor {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        info!("Reaper is now lurking...");
+        info!("Janitor is now on duty...");
+
         // This will go through all of the swarms and remove
         // any peers that have not announced in a defined time
-        ctx.run_interval(self.interval, Self::reap_peers);
+        ctx.run_interval(self.reap_interval, Self::clear_peers);
+
+        // This will flush all torrent data to the database
+        // to ensure that stats are up-to-date
+        ctx.run_interval(self.flush_interval, Self::flush);
     }
 }

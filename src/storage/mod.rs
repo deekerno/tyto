@@ -1,5 +1,5 @@
+pub mod janitor;
 pub mod mysql;
-pub mod reaper;
 
 use std::sync::Arc;
 

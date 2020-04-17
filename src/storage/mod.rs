@@ -8,8 +8,8 @@ use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::bittorrent::Peer;
 use crate::bittorrent::ScrapeFile;
+use crate::bittorrent::{Peer, Peerv4, Peerv6};
 
 #[derive(Debug, Clone)]
 struct PeerList(Vec<Peer>);
@@ -20,18 +20,14 @@ impl PeerList {
         PeerList(Vec::new())
     }
 
-    fn give_random(&mut self, numwant: u32) -> Vec<Peer> {
+    fn make_random(&mut self, numwant: u32) {
         // If the total amount of peers is less than numwant,
         // just return the entire list of peers
-        if self.0.len() <= numwant as usize {
-            self.0.clone()
-        } else {
+        if self.0.len() > numwant as usize {
             // Otherwise, choose a random sampling and send it
             let mut rng = &mut rand::thread_rng();
-            self.0
-                .choose_multiple(&mut rng, numwant as usize)
-                .cloned()
-                .collect()
+            self.0.shuffle(&mut rng);
+            self.0.truncate(numwant as usize);
         }
     }
 }
@@ -277,7 +273,7 @@ impl PeerStore {
     }
 
     // Returns a randomized vector of peers to be returned to client
-    pub async fn get_peers(&self, info_hash: String, numwant: u32) -> Vec<Peer> {
+    pub async fn get_peers(&self, info_hash: String, numwant: u32) -> (Vec<Peerv4>, Vec<Peerv6>) {
         let mut peer_list = PeerList::new();
 
         let store = self.records.read().await;
@@ -289,7 +285,23 @@ impl PeerStore {
         }
 
         // Randomized bunch of seeders and leechers
-        peer_list.give_random(numwant)
+        peer_list.make_random(numwant);
+
+        let mut peers = Vec::new();
+        let mut peers6 = Vec::new();
+
+        // Separate peers by protocol version. There are no
+        // guarantees on the presence of either in the list.
+        // It's entirely possible (but unlikely) to have peers
+        // of only one protocol type.
+        for peer in peer_list.0.drain(..) {
+            match peer {
+                Peer::V4(p) => peers.push(p),
+                Peer::V6(p) => peers6.push(p),
+            }
+        }
+
+        (peers, peers6)
     }
 }
 

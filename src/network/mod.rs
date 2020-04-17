@@ -29,23 +29,10 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                         .await;
 
                     // Get randomized peer list
-                    let peer_list = data
+                    let (peers, peers6) = data
                         .peer_store
                         .get_peers(parsed_req.info_hash.clone(), parsed_req.numwant.unwrap())
                         .await;
-                    let mut peers = Vec::new();
-                    let mut peers6 = Vec::new();
-
-                    // Separate peers by protocol version. There are no
-                    // guarantees on the presence of either in the list.
-                    // It's entirely possible (but unlikely) to have peers
-                    // of only one protocol type.
-                    for peer in peer_list {
-                        match peer {
-                            Peer::V4(p) => peers.push(p),
-                            Peer::V6(p) => peers6.push(p),
-                        }
-                    }
 
                     let (complete, incomplete) = data
                         .torrent_store
@@ -71,19 +58,10 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                         .remove_leecher(parsed_req.info_hash.clone(), parsed_req.peer)
                         .await;
 
-                    let peer_list = data
+                    let (peers, peers6) = data
                         .peer_store
                         .get_peers(parsed_req.info_hash.clone(), parsed_req.numwant.unwrap())
                         .await;
-                    let mut peers = Vec::new();
-                    let mut peers6 = Vec::new();
-
-                    for peer in peer_list {
-                        match peer {
-                            Peer::V4(p) => peers.push(p),
-                            Peer::V6(p) => peers6.push(p),
-                        }
-                    }
 
                     let (complete, incomplete) = data
                         .torrent_store
@@ -106,19 +84,10 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                         .new_seed(parsed_req.info_hash.clone())
                         .await;
 
-                    let peer_list = data
+                    let (peers, peers6) = data
                         .peer_store
                         .get_peers(parsed_req.info_hash.clone(), parsed_req.numwant.unwrap())
                         .await;
-                    let mut peers = Vec::new();
-                    let mut peers6 = Vec::new();
-
-                    for peer in peer_list {
-                        match peer {
-                            Peer::V4(p) => peers.push(p),
-                            Peer::V6(p) => peers6.push(p),
-                        }
-                    }
 
                     let (complete, incomplete) = data
                         .torrent_store
@@ -141,19 +110,10 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                         .update_peer(parsed_req.info_hash.clone(), parsed_req.peer)
                         .await;
 
-                    let peer_list = data
+                    let (peers, peers6) = data
                         .peer_store
                         .get_peers(parsed_req.info_hash.clone(), parsed_req.numwant.unwrap())
                         .await;
-                    let mut peers = Vec::new();
-                    let mut peers6 = Vec::new();
-
-                    for peer in peer_list {
-                        match peer {
-                            Peer::V4(p) => peers.push(p),
-                            Peer::V6(p) => peers6.push(p),
-                        }
-                    }
 
                     let (complete, incomplete) = data
                         .torrent_store

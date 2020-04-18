@@ -1,4 +1,5 @@
 use crate::bittorrent::Peer;
+use crate::state::State;
 use crate::storage;
 
 use std::time::Duration;
@@ -12,22 +13,16 @@ pub struct Janitor {
     reap_interval: Duration,
     peer_timeout: Duration,
     flush_interval: Duration,
-    state: web::Data<storage::Stores>,
+    state: web::Data<State>,
     pool: Pool,
 }
 
 impl Janitor {
-    pub fn new(
-        reap_interval: u64,
-        peer_timeout_secs: u64,
-        flush_interval: u64,
-        state: web::Data<storage::Stores>,
-        pool: Pool,
-    ) -> Janitor {
+    pub fn new(state: web::Data<State>, pool: Pool) -> Janitor {
         Janitor {
-            reap_interval: Duration::new(reap_interval, 0),
-            peer_timeout: Duration::new(peer_timeout_secs, 0),
-            flush_interval: Duration::new(flush_interval, 0),
+            reap_interval: Duration::new(state.config.bt.reap_interval, 0),
+            peer_timeout: Duration::new(state.config.bt.peer_timeout, 0),
+            flush_interval: Duration::new(state.config.bt.flush_interval, 0),
             state,
             pool,
         }
@@ -77,6 +72,15 @@ impl Janitor {
                     leeches_cleared += leeches_1 - swarm.leechers.len();
                 }
             }
+
+            // Make sure that stats are up-to-date
+            // TODO: Getting E0495 all over this thing
+            /*self.state
+                .stats
+                .write()
+                .await
+                .cleared_peers(seeds_cleared as u32, leeches_cleared as u32);
+            */
 
             info!(
                 "Cleared {} seeders and {} leechers.",

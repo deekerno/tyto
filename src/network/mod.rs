@@ -3,14 +3,11 @@ pub mod middleware;
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 
 use crate::bencode;
-use crate::bittorrent::{AnnounceRequest, AnnounceResponse, Peer, ScrapeRequest, ScrapeResponse};
-use crate::storage::Stores;
+use crate::bittorrent::{AnnounceRequest, AnnounceResponse, ScrapeRequest, ScrapeResponse};
+use crate::state::State;
 use crate::util::Event;
 
-// This will eventually be read from the configuration YAML.
-const INTERVAL: u32 = 1800;
-
-pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl Responder {
+pub async fn parse_announce(data: web::Data<State>, req: HttpRequest) -> impl Responder {
     let announce_request = AnnounceRequest::new(req.query_string(), req.connection_info().remote());
 
     match announce_request {
@@ -27,6 +24,7 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                     data.torrent_store
                         .new_leech(parsed_req.info_hash.clone())
                         .await;
+                    data.stats.write().await.add_leech();
 
                     // Get randomized peer list
                     let (peers, peers6) = data
@@ -41,22 +39,34 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
 
                     // Associate all the requisite data together and
                     // respond with the bencoded version of the data
-                    let response =
-                        AnnounceResponse::new(INTERVAL, complete, incomplete, peers, peers6);
+                    let response = AnnounceResponse::new(
+                        data.config.bt.announce_rate as u32,
+                        complete,
+                        incomplete,
+                        peers,
+                        peers6,
+                    );
                     let bencoded = bencode::encode_announce_response(response.unwrap());
+                    data.stats.write().await.succ_announce();
                     HttpResponse::Ok().content_type("text/plain").body(bencoded)
                 }
 
                 // Stopped should be sent when a client stops seed or leeching
                 Event::Stopped => {
-                    // Calling the remove methods ensure that the peer
-                    // is removed from a swarm regardless of where it is
-                    data.peer_store
+                    // If the peer is present in one set, then it
+                    // cannot be present in the other.
+                    if data
+                        .peer_store
                         .remove_seeder(parsed_req.info_hash.clone(), parsed_req.peer.clone())
-                        .await;
-                    data.peer_store
-                        .remove_leecher(parsed_req.info_hash.clone(), parsed_req.peer)
-                        .await;
+                        .await
+                    {
+                        data.stats.write().await.sub_seed();
+                    } else {
+                        data.peer_store
+                            .remove_leecher(parsed_req.info_hash.clone(), parsed_req.peer)
+                            .await;
+                        data.stats.write().await.sub_leech();
+                    }
 
                     let (peers, peers6) = data
                         .peer_store
@@ -68,9 +78,15 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                         .get_announce_stats(parsed_req.info_hash)
                         .await;
 
-                    let response =
-                        AnnounceResponse::new(INTERVAL, complete, incomplete, peers, peers6);
+                    let response = AnnounceResponse::new(
+                        data.config.bt.announce_rate as u32,
+                        complete,
+                        incomplete,
+                        peers,
+                        peers6,
+                    );
                     let bencoded = bencode::encode_announce_response(response.unwrap());
+                    data.stats.write().await.succ_announce();
                     HttpResponse::Ok().content_type("text/plain").body(bencoded)
                 }
 
@@ -83,6 +99,7 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                     data.torrent_store
                         .new_seed(parsed_req.info_hash.clone())
                         .await;
+                    data.stats.write().await.promote_leech();
 
                     let (peers, peers6) = data
                         .peer_store
@@ -94,9 +111,15 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                         .get_announce_stats(parsed_req.info_hash)
                         .await;
 
-                    let response =
-                        AnnounceResponse::new(INTERVAL, complete, incomplete, peers, peers6);
+                    let response = AnnounceResponse::new(
+                        data.config.bt.announce_rate as u32,
+                        complete,
+                        incomplete,
+                        peers,
+                        peers6,
+                    );
                     let bencoded = bencode::encode_announce_response(response.unwrap());
+                    data.stats.write().await.succ_announce();
                     HttpResponse::Ok().content_type("text/plain").body(bencoded)
                 }
 
@@ -120,9 +143,15 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
                         .get_announce_stats(parsed_req.info_hash)
                         .await;
 
-                    let response =
-                        AnnounceResponse::new(INTERVAL, complete, incomplete, peers, peers6);
+                    let response = AnnounceResponse::new(
+                        data.config.bt.announce_rate as u32,
+                        complete,
+                        incomplete,
+                        peers,
+                        peers6,
+                    );
                     let bencoded = bencode::encode_announce_response(response.unwrap());
+                    data.stats.write().await.succ_announce();
                     HttpResponse::Ok().content_type("text/plain").body(bencoded)
                 }
             }
@@ -131,12 +160,13 @@ pub async fn parse_announce(data: web::Data<Stores>, req: HttpRequest) -> impl R
         // If the request is not parse-able, short-circuit and respond with failure
         Err(failure) => {
             let bencoded = bencode::encode_announce_response(failure);
+            data.stats.write().await.fail_announce();
             HttpResponse::Ok().content_type("text/plain").body(bencoded)
         }
     }
 }
 
-pub async fn parse_scrape(data: web::Data<Stores>, req: HttpRequest) -> impl Responder {
+pub async fn parse_scrape(data: web::Data<State>, req: HttpRequest) -> impl Responder {
     let scrape_request = ScrapeRequest::new(req.query_string());
     match scrape_request {
         Ok(parsed_req) => {
@@ -148,6 +178,7 @@ pub async fn parse_scrape(data: web::Data<Stores>, req: HttpRequest) -> impl Res
             }
 
             let bencoded = bencode::encode_scrape_response(scrape_response);
+            data.stats.write().await.incr_scrapes();
             HttpResponse::Ok().content_type("text/plain").body(bencoded)
         }
 
@@ -165,12 +196,15 @@ mod tests {
     use actix_service::Service;
     use actix_web::{test, web, App, HttpResponse};
 
-    use crate::storage::{Stores, Torrent, TorrentRecords};
+    use crate::config::Config;
+    use crate::state::State;
+    use crate::storage::{Torrent, TorrentRecords, TorrentStore};
 
     #[actix_rt::test]
     async fn index_get_not_allowed() {
-        let records = TorrentRecords::new();
-        let stores = web::Data::new(Stores::new(records));
+        let config = Config::default();
+        let torrent_store = TorrentStore::new(TorrentRecords::new());
+        let stores = web::Data::new(State::new(config, torrent_store));
         let mut app = test::init_service(
             App::new()
                 .service(
@@ -197,8 +231,9 @@ mod tests {
 
     #[actix_rt::test]
     async fn announce_get_malformed() {
-        let records = TorrentRecords::new();
-        let stores = web::Data::new(Stores::new(records));
+        let config = Config::default();
+        let torrent_store = TorrentStore::new(TorrentRecords::new());
+        let stores = web::Data::new(State::new(config, torrent_store));
         let mut app = test::init_service(
             App::new()
                 .service(
@@ -226,8 +261,9 @@ mod tests {
 
     #[actix_rt::test]
     async fn scrape_get_malformed() {
-        let records = TorrentRecords::new();
-        let stores = web::Data::new(Stores::new(records));
+        let config = Config::default();
+        let torrent_store = TorrentStore::new(TorrentRecords::new());
+        let stores = web::Data::new(State::new(config, torrent_store));
         let mut app = test::init_service(
             App::new()
                 .service(
@@ -255,8 +291,9 @@ mod tests {
 
     #[actix_rt::test]
     async fn scrape_get_success() {
-        let records = TorrentRecords::new();
-        let stores = web::Data::new(Stores::new(records));
+        let config = Config::default();
+        let torrent_store = TorrentStore::new(TorrentRecords::new());
+        let stores = web::Data::new(State::new(config, torrent_store));
 
         let info_hash1 = "A1B2C3D4E5F6G7H8I9J0".to_string();
         let torrent1 = Torrent::new(info_hash1, 10, 34, 7, 10000000);

@@ -75,12 +75,12 @@ impl Janitor {
 
             // Make sure that stats are up-to-date
             // TODO: Getting E0495 all over this thing
-            /*self.state
+            self2
+                .state
                 .stats
                 .write()
                 .await
                 .cleared_peers(seeds_cleared as u32, leeches_cleared as u32);
-            */
 
             info!(
                 "Cleared {} seeders and {} leechers.",
@@ -112,6 +112,28 @@ impl Janitor {
             info!("Flushed {} torrents.", num_torrents);
         }));
     }
+
+    fn fetch_new_torrents(&mut self, ctx: &mut Context<Self>) {
+        let self2 = self.clone();
+        ctx.spawn(actix::fut::wrap_future(async move {
+            info!("Fetching new torrents from database...");
+
+            match storage::mysql::get_torrents(self2.pool) {
+                Ok(db_torrents) => {
+                    let mut diff = 0;
+                    let mut torrent_store = self2.state.torrent_store.torrents.write().await;
+                    for (info_hash, torrent) in db_torrents.iter() {
+                        if !torrent_store.contains_key(&info_hash[..].to_string()) {
+                            torrent_store.insert(info_hash.clone(), torrent.clone());
+                            diff += 1;
+                        }
+                    }
+                    info!("Added new {} torrents from database.", diff);
+                }
+                _ => error!("Could not fetch new torrents from database!"),
+            }
+        }));
+    }
 }
 
 impl Actor for Janitor {
@@ -127,5 +149,12 @@ impl Actor for Janitor {
         // This will flush all torrent data to the database
         // to ensure that stats are up-to-date
         ctx.run_interval(self.flush_interval, Self::flush);
+
+        // This will pull any new torrents from the database
+        // and add them to the torrent store
+        ctx.run_interval(
+            Duration::new(self.state.config.bt.announce_rate, 0),
+            Self::fetch_new_torrents,
+        );
     }
 }

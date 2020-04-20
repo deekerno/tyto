@@ -86,6 +86,11 @@ async fn main() -> std::io::Result<()> {
                     .app_data(state.clone())
                     .route("", web::get().to(network::parse_scrape)),
             )
+            .service(
+                web::scope("stats")
+                    .app_data(state.clone())
+                    .route("", web::get().to(network::get_stats)),
+            )
             .service(web::scope("/").route("", web::get().to(|| HttpResponse::MethodNotAllowed())))
     })
     .bind(binding)?

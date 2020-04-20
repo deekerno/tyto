@@ -1,6 +1,6 @@
 [package]
 name = "tyto"
-version = "0.5.0-beta"
+version = "0.5.1-beta"
 authors = ["Alexander Decurnou <ad@alx.xyz>"]
 edition = "2018"
 

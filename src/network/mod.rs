@@ -5,6 +5,7 @@ use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use crate::bencode;
 use crate::bittorrent::{AnnounceRequest, AnnounceResponse, ScrapeRequest, ScrapeResponse};
 use crate::state::State;
+use crate::statistics::ReturnedStatistics;
 use crate::util::Event;
 
 pub async fn parse_announce(data: web::Data<State>, req: HttpRequest) -> impl Responder {
@@ -24,7 +25,6 @@ pub async fn parse_announce(data: web::Data<State>, req: HttpRequest) -> impl Re
                     data.torrent_store
                         .new_leech(parsed_req.info_hash.clone())
                         .await;
-                    data.stats.write().await.add_leech();
 
                     // Get randomized peer list
                     let (peers, peers6) = data
@@ -46,8 +46,12 @@ pub async fn parse_announce(data: web::Data<State>, req: HttpRequest) -> impl Re
                         peers,
                         peers6,
                     );
+
+                    let mut stats = data.stats.write().await;
+                    stats.add_leech();
+                    stats.succ_announce();
+
                     let bencoded = bencode::encode_announce_response(response.unwrap());
-                    data.stats.write().await.succ_announce();
                     HttpResponse::Ok().content_type("text/plain").body(bencoded)
                 }
 
@@ -55,18 +59,22 @@ pub async fn parse_announce(data: web::Data<State>, req: HttpRequest) -> impl Re
                 Event::Stopped => {
                     // If the peer is present in one set, then it
                     // cannot be present in the other.
+                    let mut stats = data.stats.write().await;
+
                     if data
                         .peer_store
                         .remove_seeder(parsed_req.info_hash.clone(), parsed_req.peer.clone())
                         .await
                     {
-                        data.stats.write().await.sub_seed();
+                        stats.sub_seed();
                     } else {
                         data.peer_store
                             .remove_leecher(parsed_req.info_hash.clone(), parsed_req.peer)
                             .await;
-                        data.stats.write().await.sub_leech();
+                        stats.sub_leech();
                     }
+
+                    stats.succ_announce();
 
                     let (peers, peers6) = data
                         .peer_store
@@ -86,7 +94,6 @@ pub async fn parse_announce(data: web::Data<State>, req: HttpRequest) -> impl Re
                         peers6,
                     );
                     let bencoded = bencode::encode_announce_response(response.unwrap());
-                    data.stats.write().await.succ_announce();
                     HttpResponse::Ok().content_type("text/plain").body(bencoded)
                 }
 
@@ -99,7 +106,6 @@ pub async fn parse_announce(data: web::Data<State>, req: HttpRequest) -> impl Re
                     data.torrent_store
                         .new_seed(parsed_req.info_hash.clone())
                         .await;
-                    data.stats.write().await.promote_leech();
 
                     let (peers, peers6) = data
                         .peer_store
@@ -118,8 +124,11 @@ pub async fn parse_announce(data: web::Data<State>, req: HttpRequest) -> impl Re
                         peers,
                         peers6,
                     );
+                    let mut stats = data.stats.write().await;
+                    stats.promote_leech();
+                    stats.succ_announce();
+
                     let bencoded = bencode::encode_announce_response(response.unwrap());
-                    data.stats.write().await.succ_announce();
                     HttpResponse::Ok().content_type("text/plain").body(bencoded)
                 }
 
@@ -187,6 +196,12 @@ pub async fn parse_scrape(data: web::Data<State>, req: HttpRequest) -> impl Resp
             HttpResponse::Ok().content_type("text/plain").body(bencoded)
         }
     }
+}
+
+pub async fn get_stats(data: web::Data<State>) -> impl Responder {
+    let global_stats = data.stats.read().await;
+    let stats = ReturnedStatistics::new(&global_stats);
+    web::Json(stats)
 }
 
 #[cfg(test)]

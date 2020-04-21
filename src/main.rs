@@ -64,6 +64,7 @@ async fn main() -> std::io::Result<()> {
 
     let server = HttpServer::new(move || {
         App::new()
+            .app_data(state.clone())
             // Log all requests to stdout
             //.wrap(middleware::Logger::default())
             // If enabled, filter requests
@@ -76,21 +77,9 @@ async fn main() -> std::io::Result<()> {
                     config.client_approval.client_list.clone(),
                 ),
             ))
-            .service(
-                web::scope("announce")
-                    .app_data(state.clone())
-                    .route("", web::get().to(network::parse_announce)),
-            )
-            .service(
-                web::scope("scrape")
-                    .app_data(state.clone())
-                    .route("", web::get().to(network::parse_scrape)),
-            )
-            .service(
-                web::scope("stats")
-                    .app_data(state.clone())
-                    .route("", web::get().to(network::get_stats)),
-            )
+            .service(web::scope("announce").route("", web::get().to(network::parse_announce)))
+            .service(web::scope("scrape").route("", web::get().to(network::parse_scrape)))
+            .service(web::scope("stats").route("", web::get().to(network::get_stats)))
             .service(web::scope("/").route("", web::get().to(|| HttpResponse::MethodNotAllowed())))
     })
     .bind(binding)?

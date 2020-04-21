@@ -282,10 +282,10 @@ impl PeerStore {
 
         let store = self.records.read().await;
         if let Some(sw) = store.get(&info_hash) {
-            let mut seeds: Vec<Peer> = sw.seeders.iter().map(|p| p.clone()).collect();
-            let mut leeches: Vec<Peer> = sw.leechers.iter().map(|p| p.clone()).collect();
-            peer_list.0.append(&mut seeds);
-            peer_list.0.append(&mut leeches);
+            let seeds: Vec<Peer> = sw.seeders.iter().map(|p| p.clone()).collect();
+            let leeches: Vec<Peer> = sw.leechers.iter().map(|p| p.clone()).collect();
+            peer_list.0.extend(seeds);
+            peer_list.0.extend(leeches);
         }
 
         // Randomized bunch of seeders and leechers

@@ -22,7 +22,7 @@ trait Compact {
 // with a trait, but there's only two types right now, so it's not a lot of work
 #[derive(Clone, Eq, Ord, PartialOrd, Debug)]
 pub struct Peerv4 {
-    pub peer_id: String, // This should be 20 bytes in length
+    pub peer_id: String,
     pub ip: Ipv4Addr,
     pub port: u16,
     pub last_announced: Instant,
@@ -30,7 +30,7 @@ pub struct Peerv4 {
 
 #[derive(Clone, Eq, Ord, PartialOrd, Debug)]
 pub struct Peerv6 {
-    pub peer_id: String, // This should be 20 bytes in length
+    pub peer_id: String,
     pub ip: Ipv6Addr,
     pub port: u16,
     pub last_announced: Instant,
@@ -63,11 +63,53 @@ impl Compact for Peerv6 {
     }
 }
 
+// Compact responses are the default response type anyways, but the creation
+// of a CompactPeer type allows for the get_peers function to return peers
+// without cloning as strings are not included in peer responses.
+#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
+pub struct CompactPeerv4 {
+    pub ip: Ipv4Addr,
+    pub port: u16,
+}
+
+#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
+pub struct CompactPeerv6 {
+    pub ip: Ipv6Addr,
+    pub port: u16,
+}
+
+impl Compact for CompactPeerv4 {
+    fn compact(&self) -> Vec<u8> {
+        let ip: u32 = self.ip.into();
+
+        let mut full_compact_peer = vec![];
+        full_compact_peer.put_slice(&ip.to_be_bytes());
+        full_compact_peer.put_slice(&self.port.to_be_bytes());
+
+        full_compact_peer
+    }
+}
+
+// BEP 07: IPv6 Tracker Extension
+impl Compact for CompactPeerv6 {
+    fn compact(&self) -> Vec<u8> {
+        let ip: u128 = self.ip.into();
+
+        // Had some trouble getting i128 features to work with
+        // vectors, so this is a workaround; slowdown should be minimal
+        let mut full_compact_peer = vec![];
+        full_compact_peer.put_slice(&ip.to_be_bytes());
+        full_compact_peer.put_slice(&self.port.to_be_bytes());
+
+        full_compact_peer
+    }
+}
+
 /*
  * Proper peer hashing is important as the entire peer storage capability
  * depends upon it. Peer reaping requires a last_announced time, which
  * can't be used for hashing as the same client with a different announce
- * time would be conisdered different. Thus, a non-derived implementation
+ * time would be considered different. Thus, a non-derived implementation
  * of Hash (and its required trait PartialEq) are necessary.
  */
 impl Hash for Peerv4 {
@@ -109,6 +151,21 @@ impl Compact for Peer {
         match self {
             Peer::V4(p) => p.compact(),
             Peer::V6(p) => p.compact(),
+        }
+    }
+}
+
+#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
+pub enum CompactPeer {
+    V4(CompactPeerv4),
+    V6(CompactPeerv6),
+}
+
+impl Compact for CompactPeer {
+    fn compact(&self) -> Vec<u8> {
+        match self {
+            CompactPeer::V4(p) => p.compact(),
+            CompactPeer::V6(p) => p.compact(),
         }
     }
 }
@@ -266,8 +323,8 @@ pub struct AnnounceResponse {
     pub tracker_id: String,
     pub complete: u32,
     pub incomplete: u32,
-    pub peers: Vec<Peerv4>,
-    pub peers6: Vec<Peerv6>,
+    pub peers: Vec<CompactPeerv4>,
+    pub peers6: Vec<CompactPeerv6>,
 }
 
 impl AnnounceResponse {
@@ -275,8 +332,8 @@ impl AnnounceResponse {
         interval: u32,
         complete: u32,
         incomplete: u32,
-        peers: Vec<Peerv4>,
-        peers6: Vec<Peerv6>,
+        peers: Vec<CompactPeerv4>,
+        peers6: Vec<CompactPeerv6>,
     ) -> Result<AnnounceResponse, &'static str> {
         Ok(AnnounceResponse {
             failure_reason: None,
@@ -378,10 +435,7 @@ mod tests {
     use std::net::{Ipv4Addr, Ipv6Addr};
     use std::time::Instant;
 
-    use super::{
-        AnnounceRequest, AnnounceResponse, Compact, Peer, Peerv4, Peerv6, ScrapeFile,
-        ScrapeRequest, ScrapeResponse,
-    };
+    use super::*;
 
     use bytes::BufMut;
 
@@ -409,41 +463,33 @@ mod tests {
 
     #[test]
     fn announce_response_creation() {
-        let peerv4_1 = Peerv4 {
-            peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
+        let peerv4_1 = CompactPeerv4 {
             ip: Ipv4Addr::LOCALHOST,
             port: 6893,
-            last_announced: Instant::now(),
         };
-        let peerv4_2 = Peerv4 {
-            peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
+        let peerv4_2 = CompactPeerv4 {
             ip: Ipv4Addr::BROADCAST,
             port: 6894,
-            last_announced: Instant::now(),
         };
 
-        let mut peers: Vec<Peerv4> = Vec::new();
+        let mut peers: Vec<CompactPeerv4> = Vec::new();
         peers.push(peerv4_1);
         peers.push(peerv4_2);
 
-        let peerv6_1 = Peerv6 {
-            peer_id: "ABCDEFGHIJKLMNOPABCD".to_string(),
+        let peerv6_1 = CompactPeerv6 {
             ip: Ipv6Addr::new(
                 0x2001, 0x0db8, 0x85a3, 0x0000, 0x0000, 0x8a2e, 0x0370, 0x7334,
             ),
             port: 6681,
-            last_announced: Instant::now(),
         };
-        let peerv6_2 = Peerv6 {
-            peer_id: "ABCDEFGHIJKLMNOPZZZZ".to_string(),
+        let peerv6_2 = CompactPeerv6 {
             ip: Ipv6Addr::new(
                 0xfe80, 0x0000, 0x0000, 0x0000, 0x0202, 0xb3ff, 0xfe1e, 0x8329,
             ),
             port: 6699,
-            last_announced: Instant::now(),
         };
 
-        let mut peers6: Vec<Peerv6> = Vec::new();
+        let mut peers6: Vec<CompactPeerv6> = Vec::new();
         peers6.push(peerv6_1);
         peers6.push(peerv6_2);
 

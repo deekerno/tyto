@@ -22,5 +22,5 @@ Cargo.lock
 .DS_Store
 flamegraph.pl
 out.stacks
-pretty-graph.svg
+*.svg
 stackcollapse.pl

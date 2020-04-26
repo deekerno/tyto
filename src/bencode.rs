@@ -99,47 +99,39 @@ pub fn encode_scrape_response(response: ScrapeResponse) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bittorrent::{AnnounceResponse, Peerv4, Peerv6, ScrapeResponse};
+    use crate::bittorrent::{AnnounceResponse, CompactPeerv4, CompactPeerv6, ScrapeResponse};
     use std::net::{Ipv4Addr, Ipv6Addr};
     use std::time::Instant;
 
     #[test]
     fn announce_response_encoding() {
-        let peerv4_1 = Peerv4 {
-            peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
+        let peerv4_1 = CompactPeerv4 {
             ip: Ipv4Addr::LOCALHOST,
             port: 6893,
-            last_announced: Instant::now(),
         };
-        let peerv4_2 = Peerv4 {
-            peer_id: "ABCDEFGHIJKLMNOPQRST".to_string(),
+        let peerv4_2 = CompactPeerv4 {
             ip: Ipv4Addr::BROADCAST,
             port: 6894,
-            last_announced: Instant::now(),
         };
 
-        let mut peers: Vec<Peerv4> = Vec::new();
+        let mut peers: Vec<CompactPeerv4> = Vec::new();
         peers.push(peerv4_1);
         peers.push(peerv4_2);
 
-        let peerv6_1 = Peerv6 {
-            peer_id: "ABCDEFGHIJKLMNOPABCD".to_string(),
+        let peerv6_1 = CompactPeerv6 {
             ip: Ipv6Addr::new(
                 0x2001, 0x0db8, 0x85a3, 0x0000, 0x0000, 0x8a2e, 0x0370, 0x7334,
             ),
             port: 6681,
-            last_announced: Instant::now(),
         };
-        let peerv6_2 = Peerv6 {
-            peer_id: "ABCDEFGHIJKLMNOPZZZZ".to_string(),
+        let peerv6_2 = CompactPeerv6 {
             ip: Ipv6Addr::new(
                 0xfe80, 0x0000, 0x0000, 0x0000, 0x0202, 0xb3ff, 0xfe1e, 0x8329,
             ),
             port: 6699,
-            last_announced: Instant::now(),
         };
 
-        let mut peers6: Vec<Peerv6> = Vec::new();
+        let mut peers6: Vec<CompactPeerv6> = Vec::new();
         peers6.push(peerv6_1);
         peers6.push(peerv6_2);
 

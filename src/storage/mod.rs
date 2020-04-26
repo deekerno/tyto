@@ -9,10 +9,10 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use crate::bittorrent::ScrapeFile;
-use crate::bittorrent::{Peer, Peerv4, Peerv6};
+use crate::bittorrent::{CompactPeer, CompactPeerv4, CompactPeerv6, Peer};
 
 #[derive(Debug, Clone)]
-struct PeerList(Vec<Peer>);
+struct PeerList(Vec<CompactPeer>);
 
 // Wasn't a huge fan of this, but couldn't do it using FromIterator
 impl PeerList {
@@ -277,13 +277,43 @@ impl PeerStore {
     }
 
     // Returns a randomized vector of peers to be returned to client
-    pub async fn get_peers(&self, info_hash: String, numwant: u32) -> (Vec<Peerv4>, Vec<Peerv6>) {
+    pub async fn get_peers(
+        &self,
+        info_hash: String,
+        numwant: u32,
+    ) -> (Vec<CompactPeerv4>, Vec<CompactPeerv6>) {
         let mut peer_list = PeerList::new();
 
         let store = self.records.read().await;
         if let Some(sw) = store.get(&info_hash) {
-            let seeds: Vec<Peer> = sw.seeders.iter().map(|p| p.clone()).collect();
-            let leeches: Vec<Peer> = sw.leechers.iter().map(|p| p.clone()).collect();
+            let seeds: Vec<CompactPeer> = sw
+                .seeders
+                .iter()
+                .map(|p| match p {
+                    Peer::V4(p) => CompactPeer::V4(CompactPeerv4 {
+                        ip: p.ip,
+                        port: p.port,
+                    }),
+                    Peer::V6(p) => CompactPeer::V6(CompactPeerv6 {
+                        ip: p.ip,
+                        port: p.port,
+                    }),
+                })
+                .collect();
+            let leeches: Vec<CompactPeer> = sw
+                .leechers
+                .iter()
+                .map(|p| match p {
+                    Peer::V4(p) => CompactPeer::V4(CompactPeerv4 {
+                        ip: p.ip,
+                        port: p.port,
+                    }),
+                    Peer::V6(p) => CompactPeer::V6(CompactPeerv6 {
+                        ip: p.ip,
+                        port: p.port,
+                    }),
+                })
+                .collect();
             peer_list.0.extend(seeds);
             peer_list.0.extend(leeches);
         }
@@ -300,8 +330,8 @@ impl PeerStore {
         // of only one protocol type.
         for peer in peer_list.0.drain(..) {
             match peer {
-                Peer::V4(p) => peers.push(p),
-                Peer::V6(p) => peers6.push(p),
+                CompactPeer::V4(p) => peers.push(p),
+                CompactPeer::V6(p) => peers6.push(p),
             }
         }
 

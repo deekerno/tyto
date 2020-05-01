@@ -267,7 +267,7 @@ mod tests {
         )
         .await;
 
-        let proper_resp = "d14:failure_reason17:Malformed requeste".as_bytes();
+        let proper_resp = "d14:failure_reason26:Malformed announce requeste".as_bytes();
         let req = test::TestRequest::with_uri("/announce?bad_stuff=123").to_request();
         let resp = test::read_response(&mut app, req).await;
 

@@ -1,6 +1,7 @@
 pub mod bencode;
 pub mod bittorrent;
 pub mod config;
+pub mod errors;
 pub mod network;
 pub mod state;
 pub mod statistics;
@@ -28,7 +29,7 @@ async fn main() -> std::io::Result<()> {
     pretty_env_logger::init_timed();
 
     let matches = ClapApp::new("tyto")
-        .version("0.2.1")
+        .version("0.5.5")
         .author("Alexander Decurnou. <ad@alx.xyz>")
         .about("A BitTorrent tracker that aims to be distributed, fast, and fault-tolerant.")
         .arg(
@@ -57,10 +58,11 @@ async fn main() -> std::io::Result<()> {
     // backend and instantiate data stores.
     let pool = mysql::Pool::new(&config.storage.path).unwrap();
     let torrents = storage::mysql::get_torrents(pool.clone()).unwrap();
-    let torrent_records = storage::TorrentStore::new(torrents.clone());
+    info!("Number of torrents loaded: {}", torrents.len());
+
+    let torrent_records = storage::TorrentStore::new(torrents);
     let state = web::Data::new(State::new(config.clone(), torrent_records));
     let janitor_state_clone = state.clone();
-    info!("Number of torrents loaded: {}", torrents.len());
 
     let server = HttpServer::new(move || {
         App::new()

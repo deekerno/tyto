@@ -12,6 +12,7 @@ use percent_encoding;
 use regex::Regex;
 use url::form_urlencoded;
 
+use crate::errors::ClientError;
 use crate::util::{string_to_event, Event};
 
 trait Compact {
@@ -216,39 +217,76 @@ impl AnnounceRequest {
                     match percent_encoding::percent_decode(value.as_bytes()).decode_utf8() {
                         Ok(s) => info_hash = s.to_string(),
                         _ => {
-                            return Err(AnnounceResponse::failure("Malformed request".to_string()))
+                            return Err(AnnounceResponse::failure(
+                                ClientError::MalformedAnnounce.text(),
+                            ))
                         }
                     }
                 }
                 "peer_id" => peer_string = value,
                 "port" => match value.parse::<u16>() {
                     Ok(n) => port = n,
-                    _ => return Err(AnnounceResponse::failure("Malformed request".to_string())),
+                    _ => {
+                        return Err(AnnounceResponse::failure(
+                            ClientError::MalformedAnnounce.text(),
+                        ))
+                    }
                 },
                 "uploaded" => match value.parse::<u32>() {
                     Ok(n) => uploaded = n,
-                    _ => return Err(AnnounceResponse::failure("Malformed request".to_string())),
+                    _ => {
+                        return Err(AnnounceResponse::failure(
+                            ClientError::MalformedAnnounce.text(),
+                        ))
+                    }
                 },
                 "downloaded" => match value.parse::<u32>() {
                     Ok(n) => downloaded = n,
-                    _ => return Err(AnnounceResponse::failure("Malformed request".to_string())),
+                    _ => {
+                        return Err(AnnounceResponse::failure(
+                            ClientError::MalformedAnnounce.text(),
+                        ))
+                    }
                 },
                 "left" => match value.parse::<u32>() {
                     Ok(n) => left = n,
-                    _ => return Err(AnnounceResponse::failure("Malformed request".to_string())),
+                    _ => {
+                        return Err(AnnounceResponse::failure(
+                            ClientError::MalformedAnnounce.text(),
+                        ))
+                    }
                 },
                 "compact" => match value.parse::<u32>() {
                     Ok(n) => compact = n != 0,
-                    _ => return Err(AnnounceResponse::failure("Malformed request".to_string())),
+                    _ => {
+                        return Err(AnnounceResponse::failure(
+                            ClientError::MalformedAnnounce.text(),
+                        ))
+                    }
                 },
                 "no_peer_id" => match value.parse::<u32>() {
                     Ok(n) => no_peer_id = n != 0,
-                    _ => return Err(AnnounceResponse::failure("Malformed request".to_string())),
+                    _ => {
+                        return Err(AnnounceResponse::failure(
+                            ClientError::MalformedAnnounce.text(),
+                        ))
+                    }
                 },
-                "event" => event = string_to_event(value),
+                "event" => match string_to_event(value) {
+                    Ok(ev) => event = ev,
+                    _ => {
+                        return Err(AnnounceResponse::failure(
+                            ClientError::MalformedAnnounce.text(),
+                        ))
+                    }
+                },
                 "ip" => match value.parse::<IpAddr>() {
                     Ok(addr) => ip = Some(addr),
-                    _ => return Err(AnnounceResponse::failure("Malformed request".to_string())),
+                    _ => {
+                        return Err(AnnounceResponse::failure(
+                            ClientError::MalformedAnnounce.text(),
+                        ))
+                    }
                 },
                 "numwant" => match value.parse::<u32>() {
                     Ok(n) => numwant = Some(n),
@@ -262,7 +300,9 @@ impl AnnounceRequest {
 
         // This should not be the default value
         if info_hash == "" {
-            return Err(AnnounceResponse::failure("Malformed request".to_string()));
+            return Err(AnnounceResponse::failure(
+                ClientError::MalformedAnnounce.text(),
+            ));
         }
 
         // Digusting unwrap sequence, but whatever.

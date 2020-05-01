@@ -1,3 +1,5 @@
+use crate::errors::ClientError;
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Event {
     Started,
@@ -6,17 +8,13 @@ pub enum Event {
     None,
 }
 
-pub fn string_to_event(s: String) -> Event {
+pub fn string_to_event(s: String) -> Result<Event, ClientError> {
     match s.as_ref() {
-        "started" => Event::Started,
-        "stopped" => Event::Stopped,
-        "completed" => Event::Completed,
-        "" => Event::None,
-        _ => Event::None,
-        // MAYBE:
-        // This should probably return an error such as "Error:
-        // Malformed Request" along with the PeerID of the client,
-        // and ignore the request from the client.
+        "started" => Ok(Event::Started),
+        "stopped" => Ok(Event::Stopped),
+        "completed" => Ok(Event::Completed),
+        "" => Ok(Event::None),
+        _ => Err(ClientError::MalformedAnnounce),
     }
 }
 
@@ -36,13 +34,16 @@ mod tests {
     #[test]
     fn event_string_to_event_good() {
         let s = "started".to_string();
-        assert_eq!(string_to_event(s), Event::Started);
+        assert_eq!(string_to_event(s).unwrap(), Event::Started);
     }
 
     #[test]
     fn event_string_to_event_garbage() {
         let s = "garbage".to_string();
-        assert_eq!(string_to_event(s), Event::None);
+        assert!(
+            string_to_event(s).is_err(),
+            "String 'garbage' should result in error"
+        );
     }
 
     #[test]

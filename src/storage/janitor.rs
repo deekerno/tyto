@@ -1,4 +1,5 @@
 use crate::bittorrent::Peer;
+use crate::errors::InternalError;
 use crate::state::State;
 use crate::storage;
 
@@ -130,7 +131,7 @@ impl Janitor {
                     }
                     info!("Added new {} torrents from database.", diff);
                 }
-                _ => error!("Could not fetch new torrents from database!"),
+                _ => error!("{}", InternalError::StorageTorrentFetchNew.text()),
             }
         }));
     }

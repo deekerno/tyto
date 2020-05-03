@@ -4,6 +4,8 @@ use std::io::Read;
 use serde::Deserialize;
 use toml;
 
+use crate::errors::InternalError;
+
 #[derive(Default, Deserialize, Clone)]
 pub struct Config {
     pub network: Network,
@@ -87,20 +89,20 @@ impl Config {
         let mut file = match File::open(&path) {
             Ok(file) => file,
             _ => {
-                error!("Could not find config file; loading default config...");
+                error!("{}", InternalError::ConfigFileOpen.text());
                 return Config::default();
             }
         };
 
         if file.read_to_string(&mut config_toml).is_err() {
-            error!("Could not read config file; loading default config...");
+            error!("{}", InternalError::ConfigFileRead.text());
             return Config::default();
         };
 
         let config: Config = match toml::from_str(&config_toml) {
             Ok(t) => t,
             _ => {
-                error!("Could not parse config file; loading default config...");
+                error!("{}", InternalError::ConfigParse.text());
                 Config::default()
             }
         };

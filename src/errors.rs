@@ -33,3 +33,21 @@ impl ClientError {
         }
     }
 }
+
+impl InternalError {
+    pub fn text(&self) -> &'static str {
+        match *self {
+            InternalError::ConfigFileOpen => {
+                "Could not find config file! Loading default config..."
+            }
+            InternalError::ConfigFileRead => {
+                "Could not read config file! Loading default config..."
+            }
+            InternalError::ConfigParse => "Could not parse config file! Loading default config...",
+            InternalError::ConfigReload => "Could not reload configuration! Keeping old config...",
+            InternalError::StorageTorrentFetchNew => "Could not fetch new torrents from disk!",
+            InternalError::StorageTorrentFlush => "Could not flush torrents to disk!",
+            InternalError::StorageTorrentLoad => "Could not load torrents from disk!",
+        }
+    }
+}

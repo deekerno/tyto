@@ -1,31 +1,7 @@
 [package]
 name = "tyto"
-version = "0.5.5-beta"
-authors = ["Alexander Decurnou <ad@alx.xyz>"]
-edition = "2018"
+version = "0.6"
+authors = ["Alexander Decurnou <alex@deekerno.com>"]
+edition = "2021"
 
 [dependencies]
-actix = "0.9.0"
-actix-rt = "1.0.0"
-actix-service = "1.0.5"
-actix-web = "2.0.0"
-bendy = "^0.2"
-bincode = "*"
-bytes = "*"
-clap = "*"
-env = "*"
-futures = "0.3"
-log = "*"
-mysql = "*"
-percent-encoding = "*"
-pretty_env_logger = "*"
-rand = "*"
-regex = "*"
-serde = { version = "1.0", features = ["derive", "rc"] }
-tokio = { version = "0.2.17", features = ["macros", "sync"] }
-toml = "*"
-url = "*"
-
-[dependencies.hashbrown]
-version = "*"
-features = ["serde", "rayon"]

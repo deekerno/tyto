@@ -73,34 +73,6 @@ struct AnnounceRequest {
     trackerid: Option<String>,
 }
 
-impl Display for AnnounceRequest {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{{ info_hash: {}, peer_id: {}, port: {}, uploaded: {}, downloaded: {}, left: {}, compact: {}, no_peer_id: {}", String::from_utf8(self.info_hash.clone()).unwrap(), String::from_utf8(self.peer_id.clone()).unwrap(), self.port, self.uploaded, self.downloaded, self.left, self.compact, self.no_peer_id)?;
-
-        if let Some(event) = &self.event {
-            write!(f, ", event: {}", event)?;
-        };
-
-        if let Some(ip) = &self.ip {
-            write!(f, ", ip: {}", ip)?;
-        };
-
-        if let Some(numwant) = &self.numwant {
-            write!(f, ", numwant: {}", numwant)?;
-        };
-
-        if let Some(key) = &self.key {
-            write!(f, ", key: {}", key)?;
-        };
-
-        if let Some(trackerid) = &self.trackerid {
-            write!(f, ", trackerid: {}", trackerid)?;
-        };
-
-        write!(f, " }}")
-    }
-}
-
 fn deserialize_url_encode<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
 where
     D: Deserializer<'de>,
@@ -141,13 +113,70 @@ where
     }
 }
 
+enum AnnounceResponse {
+    Failure {
+        failure_reason: String,
+    },
+    Success {
+        interval: u64,
+        complete: u64,
+        incomplete: u64,
+        warning_message: Option<String>,
+        min_interval: Option<u64>,
+        peers: Vec<String>,
+    },
+}
+
+impl Display for AnnounceResponse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Failure { failure_reason } => {
+                write!(f, "failure_reason: {}", failure_reason)
+            }
+            Self::Success {
+                interval,
+                complete,
+                incomplete,
+                warning_message,
+                min_interval,
+                peers,
+            } => {
+                write!(
+                    f,
+                    "interval: {}, complete: {}, incomplete: {}",
+                    interval, complete, incomplete
+                )?;
+
+                if let Some(warning) = warning_message {
+                    write!(f, ", warning_message: {}", warning)?;
+                };
+
+                if let Some(minimum) = min_interval {
+                    write!(f, ", min_interval: {}", minimum)?;
+                };
+
+                write!(f, ", peers: ")?;
+
+                for peer in peers.iter() {
+                    write!(f, "{}", peer)?;
+                }
+
+                write!(f, "")
+            }
+        }
+    }
+}
+
 async fn handle_announce(announce: Query<AnnounceRequest>) -> impl IntoResponse {
     let announce: AnnounceRequest = announce.0;
+    let response = AnnounceResponse::Failure {
+        failure_reason: "test".to_string(),
+    };
 
     (
         StatusCode::OK,
         [(header::CONTENT_TYPE, "text/plain")],
-        announce.to_string(),
+        response.to_string(),
     )
 }
 

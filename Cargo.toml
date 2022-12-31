@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 axum = "0.6"
+rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.0", features = ["full", "sync"] }
 urlencoding = "2.1"

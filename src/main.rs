@@ -1,12 +1,151 @@
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::net::IpAddr;
+use std::sync::Arc;
 use std::{fmt, str::FromStr};
 
 use axum::http::{header, StatusCode};
 use axum::response::IntoResponse;
 use axum::{extract::Query, routing::get, Router};
 
+use rand::seq::SliceRandom;
 use serde::{de, Deserialize, Deserializer};
+use tokio::sync::RwLock;
+
+type InfoHash = Vec<u8>;
+type PeerId = Vec<u8>;
+
+#[derive(Hash, Eq, PartialEq, Clone)]
+struct Peer {
+    id: PeerId,
+    ip: IpAddr,
+    port: u16,
+}
+
+#[derive(Clone)]
+struct Swarm {
+    seeders: HashSet<Peer>,
+    leechers: HashSet<Peer>,
+}
+
+impl Swarm {
+    fn new() -> Swarm {
+        Swarm {
+            seeders: HashSet::new(),
+            leechers: HashSet::new(),
+        }
+    }
+
+    fn add_seeder(&mut self, peer: Peer) {
+        self.seeders.insert(peer);
+    }
+
+    fn add_leecher(&mut self, peer: Peer) {
+        self.leechers.insert(peer);
+    }
+
+    fn remove_seeder(&mut self, peer: Peer) {
+        self.seeders.remove(&peer);
+    }
+
+    fn remove_leecher(&mut self, peer: Peer) {
+        self.leechers.remove(&peer);
+    }
+
+    fn promote_leecher(&mut self, peer: Peer) {
+        match self.leechers.take(&peer) {
+            Some(leecher) => self.seeders.insert(leecher),
+            None => self.seeders.insert(peer),
+        };
+    }
+}
+
+#[derive(Clone)]
+struct SwarmStore(Arc<RwLock<HashMap<InfoHash, Swarm>>>);
+
+impl SwarmStore {
+    fn new() -> SwarmStore {
+        SwarmStore(Arc::new(RwLock::new(HashMap::new())))
+    }
+
+    async fn add_peer(&mut self, info_hash: InfoHash, peer: Peer, is_download_complete: bool) {
+        let mut write_locked_store = self.0.write().await;
+        match write_locked_store.get_mut(&info_hash) {
+            Some(swarm) => {
+                if is_download_complete {
+                    swarm.add_seeder(peer);
+                } else {
+                    swarm.add_leecher(peer);
+                }
+            }
+            None => {
+                let mut swarm = Swarm::new();
+                if is_download_complete {
+                    swarm.add_seeder(peer);
+                } else {
+                    swarm.add_leecher(peer);
+                }
+                write_locked_store.insert(info_hash, swarm);
+            }
+        }
+    }
+
+    async fn remove_peer(&mut self, info_hash: InfoHash, peer: Peer) {
+        let mut write_locked_store = self.0.write().await;
+        if let Some(swarm) = write_locked_store.get_mut(&info_hash) {
+            swarm.remove_seeder(peer.clone());
+            swarm.remove_leecher(peer);
+        }
+    }
+
+    async fn promote_peer(&mut self, info_hash: InfoHash, peer: Peer) {
+        let mut write_locked_store = self.0.write().await;
+        if let Some(swarm) = write_locked_store.get_mut(&info_hash) {
+            swarm.promote_leecher(peer)
+        }
+    }
+
+    async fn get_peers(&self, info_hash: InfoHash, numwant: usize) -> (Vec<Peer>, Vec<Peer>) {
+        let (mut peers, mut peers6): (Vec<Peer>, Vec<Peer>) = (Vec::new(), Vec::new());
+        let read_locked_store = self.0.read().await;
+        if let Some(swarm) = read_locked_store.get(&info_hash) {
+            for peer in swarm.seeders.clone().into_iter() {
+                if peer.ip.is_ipv4() {
+                    peers.push(peer);
+                } else {
+                    peers6.push(peer);
+                }
+            }
+
+            for peer in swarm.leechers.clone().into_iter() {
+                if peer.ip.is_ipv4() {
+                    peers.push(peer);
+                } else {
+                    peers6.push(peer);
+                }
+            }
+
+            if (swarm.seeders.len() + swarm.leechers.len()) > numwant {
+                let mut rng = rand::thread_rng();
+                peers.shuffle(&mut rng);
+                peers6.shuffle(&mut rng);
+                peers.truncate(numwant);
+                peers6.truncate(numwant);
+            }
+        }
+
+        (peers, peers6)
+    }
+
+    async fn get_announce_stats(&self, info_hash: InfoHash) -> (usize, usize) {
+        let read_locked_store = self.0.read().await;
+        if let Some(swarm) = read_locked_store.get(&info_hash) {
+            return (swarm.seeders.len(), swarm.leechers.len());
+        } else {
+            return (0, 0);
+        }
+    }
+}
 
 #[derive(Deserialize)]
 enum Event {
@@ -66,7 +205,7 @@ struct AnnounceRequest {
     #[serde(default, deserialize_with = "deserialize_optional_fields")]
     ip: Option<IpAddr>,
     #[serde(default, deserialize_with = "deserialize_optional_fields")]
-    numwant: Option<u64>,
+    numwant: Option<usize>,
     #[serde(default, deserialize_with = "deserialize_optional_fields")]
     key: Option<String>,
     #[serde(default, deserialize_with = "deserialize_optional_fields")]

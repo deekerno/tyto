@@ -9,6 +9,7 @@ use axum::http::{header, StatusCode};
 use axum::response::IntoResponse;
 use axum::{extract::Query, routing::get, Router};
 
+use bendy::encoding::{Error, SingleItemEncoder, ToBencode};
 use rand::seq::SliceRandom;
 use serde::{de, Deserialize, Deserializer};
 use tokio::sync::RwLock;
@@ -21,6 +22,21 @@ struct Peer {
     id: PeerId,
     ip: IpAddr,
     port: u16,
+}
+
+impl ToBencode for Peer {
+    const MAX_DEPTH: usize = 1;
+
+    fn encode(&self, encoder: SingleItemEncoder) -> Result<(), Error> {
+        encoder.emit_dict(|mut e| {
+            e.emit_pair(b"ip", self.ip.to_string())?;
+            e.emit_pair(b"peer_id", self.id.clone())?;
+            e.emit_pair(b"port", self.port)?;
+            Ok(())
+        })?;
+
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -269,62 +285,51 @@ enum AnnounceResponse {
     },
 }
 
-impl Display for AnnounceResponse {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl ToBencode for AnnounceResponse {
+    const MAX_DEPTH: usize = 5;
+    fn encode(&self, encoder: SingleItemEncoder) -> Result<(), Error> {
         match self {
             Self::Failure { failure_reason } => {
-                write!(f, "failure_reason: {}", failure_reason)
+                encoder.emit_dict(|mut e| {
+                    e.emit_pair(b"failure_reason", failure_reason)?;
+                    Ok(())
+                })?;
             }
             Self::Success {
                 interval,
                 complete,
                 incomplete,
-                warning_message,
-                min_interval,
+                tracker_id,
                 peers,
                 peers6,
+                warning_message,
+                min_interval,
             } => {
-                write!(
-                    f,
-                    "interval: {}, complete: {}, incomplete: {}",
-                    interval, complete, incomplete
-                )?;
+                encoder.emit_dict(|mut e| {
+                    e.emit_pair(b"complete", complete)?;
+                    e.emit_pair(b"incomplete", incomplete)?;
+                    e.emit_pair(b"interval", interval)?;
 
-                if let Some(warning) = warning_message {
-                    write!(f, ", warning_message: {}", warning)?;
-                };
+                    if let Some(min_interval) = min_interval {
+                        e.emit_pair(b"min_interval", min_interval)?;
+                    }
 
-                if let Some(minimum) = min_interval {
-                    write!(f, ", min_interval: {}", minimum)?;
-                };
+                    e.emit_pair(b"peers", peers)?;
+                    e.emit_pair(b"peers6", peers6)?;
 
-                write!(f, ", peers: [")?;
+                    e.emit_pair(b"tracker_id", tracker_id)?;
 
-                for peer in peers.iter() {
-                    write!(
-                        f,
-                        " {{ peer_id: {}, ip: {}, port: {} }} ",
-                        String::from_utf8(peer.id.clone()).unwrap(),
-                        peer.ip.to_string(),
-                        peer.port
-                    )?;
-                }
 
-                write!(f, "], peers6: [")?;
+                    if let Some(warning_message) = warning_message {
+                        e.emit_pair(b"warning_message", warning_message)?;
+                    }
 
-                for peer in peers6.iter() {
-                    write!(
-                        f,
-                        " {{ peer_id: {}, ip: {}, port: {} }} ",
-                        String::from_utf8(peer.id.clone()).unwrap(),
-                        peer.ip.to_string(),
-                        peer.port
-                    )?;
-                }
-
-                write!(f, "]")
+                    Ok(())
+                })?;
             }
         }
+
+        Ok(())
     }
 }
 
@@ -390,7 +395,7 @@ async fn handle_announce(
     (
         StatusCode::OK,
         [(header::CONTENT_TYPE, "text/plain")],
-        response.to_string(),
+        response.to_bencode().unwrap(),
     )
 }
 

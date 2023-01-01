@@ -1,9 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::{fmt, str::FromStr};
 
+use axum::extract::{ConnectInfo, State};
 use axum::http::{header, StatusCode};
 use axum::response::IntoResponse;
 use axum::{extract::Query, routing::get, Router};
@@ -258,11 +259,13 @@ enum AnnounceResponse {
     },
     Success {
         interval: u64,
-        complete: u64,
-        incomplete: u64,
+        complete: usize,
+        incomplete: usize,
+        peers: Vec<Peer>,
+        peers6: Vec<Peer>,
+        tracker_id: String,
         warning_message: Option<String>,
         min_interval: Option<u64>,
-        peers: Vec<String>,
     },
 }
 
@@ -279,6 +282,7 @@ impl Display for AnnounceResponse {
                 warning_message,
                 min_interval,
                 peers,
+                peers6,
             } => {
                 write!(
                     f,
@@ -294,22 +298,93 @@ impl Display for AnnounceResponse {
                     write!(f, ", min_interval: {}", minimum)?;
                 };
 
-                write!(f, ", peers: ")?;
+                write!(f, ", peers: [")?;
 
                 for peer in peers.iter() {
-                    write!(f, "{}", peer)?;
+                    write!(
+                        f,
+                        " {{ peer_id: {}, ip: {}, port: {} }} ",
+                        String::from_utf8(peer.id.clone()).unwrap(),
+                        peer.ip.to_string(),
+                        peer.port
+                    )?;
                 }
 
-                write!(f, "")
+                write!(f, "], peers6: [")?;
+
+                for peer in peers6.iter() {
+                    write!(
+                        f,
+                        " {{ peer_id: {}, ip: {}, port: {} }} ",
+                        String::from_utf8(peer.id.clone()).unwrap(),
+                        peer.ip.to_string(),
+                        peer.port
+                    )?;
+                }
+
+                write!(f, "]")
             }
         }
     }
 }
 
-async fn handle_announce(announce: Query<AnnounceRequest>) -> impl IntoResponse {
+async fn handle_announce(
+    announce: Query<AnnounceRequest>,
+    State(mut swarm_store): State<SwarmStore>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> impl IntoResponse {
     let announce: AnnounceRequest = announce.0;
-    let response = AnnounceResponse::Failure {
-        failure_reason: "test".to_string(),
+
+    let info_hash = announce.info_hash;
+
+    if let Some(event) = announce.event {
+        let ip = if let Some(client_ip) = announce.ip {
+            client_ip
+        } else {
+            addr.ip()
+        };
+
+        let peer = Peer {
+            id: announce.peer_id,
+            ip,
+            port: announce.port,
+        };
+
+        let is_download_complete = announce.left == 0;
+
+        match event {
+            Event::Started => {
+                swarm_store
+                    .add_peer(info_hash.clone(), peer, is_download_complete)
+                    .await;
+            }
+            Event::Stopped => {
+                swarm_store.remove_peer(info_hash.clone(), peer).await;
+            }
+            Event::Completed => {
+                swarm_store.promote_peer(info_hash.clone(), peer).await;
+            }
+        }
+    }
+
+    let numwant = if let Some(n) = announce.numwant {
+        n
+    } else {
+        30 // 30 peers is generally a good amount
+    };
+
+    let (peers, peers6) = swarm_store.get_peers(info_hash.clone(), numwant).await;
+    let (complete, incomplete) = swarm_store.get_announce_stats(info_hash).await;
+
+    let response = AnnounceResponse::Success {
+        interval: 1800, // 30-minute announce interval
+        complete,
+        incomplete,
+        peers,
+        peers6,
+        tracker_id: String::from("test"),
+        min_interval: None,
+        warning_message: None,
     };
 
     (
@@ -321,12 +396,15 @@ async fn handle_announce(announce: Query<AnnounceRequest>) -> impl IntoResponse 
 
 #[tokio::main]
 async fn main() {
+    let swarm_store: SwarmStore = SwarmStore::new();
+
     let app = Router::new()
         .route("/announce", get(handle_announce))
-        .route("/", get(|| async { "Hello, World!" }));
+        .route("/", get(|| async { "Hello, World!" }))
+        .with_state(swarm_store);
 
     axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
-        .serve(app.into_make_service())
+        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
         .await
         .unwrap();
 }

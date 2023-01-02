@@ -162,6 +162,94 @@ impl SwarmStore {
             return (0, 0);
         }
     }
+
+    async fn get_stats_for_scrapes(&self, info_hashes: Vec<InfoHash>) -> Vec<(usize, usize)> {
+        let read_locked_store = self.0.read().await;
+        let stats = info_hashes
+            .iter()
+            .map(|info_hash| {
+                if let Some(swarm) = read_locked_store.get(info_hash) {
+                    return (swarm.seeders.len(), swarm.leechers.len());
+                } else {
+                    return (0, 0);
+                }
+            })
+            .collect();
+        stats
+    }
+
+    async fn get_global_scrape_stats(&self) -> HashMap<InfoHash, (usize, usize)> {
+        let read_locked_store = self.0.read().await;
+        let mut new_map = HashMap::new();
+
+        for (info_hash, swarm) in read_locked_store.iter() {
+            new_map.insert(
+                info_hash.clone(),
+                (swarm.seeders.len(), swarm.leechers.len()),
+            );
+        }
+
+        new_map
+    }
+}
+
+#[derive(Deserialize)]
+struct Torrent {
+    info_hash: InfoHash,
+    downloaded: usize,
+}
+
+#[derive(Clone)]
+struct TorrentStore(Arc<RwLock<HashMap<InfoHash, Torrent>>>);
+
+impl TorrentStore {
+    fn new() -> TorrentStore {
+        TorrentStore(Arc::new(RwLock::new(HashMap::new())))
+    }
+
+    async fn add_torrent(&mut self, info_hash: InfoHash) {
+        let mut write_locked_store = self.0.write().await;
+        write_locked_store.insert(
+            info_hash.clone(),
+            Torrent {
+                info_hash,
+                downloaded: 0,
+            },
+        );
+    }
+
+    async fn increment_downloaded(&mut self, info_hash: InfoHash) {
+        let mut write_locked_store = self.0.write().await;
+        if let Some(torrent) = write_locked_store.get_mut(&info_hash) {
+            torrent.downloaded += 1;
+        }
+    }
+
+    async fn get_stats_for_scrapes(&self, info_hashes: Vec<InfoHash>) -> Vec<usize> {
+        let read_locked_store = self.0.read().await;
+        let stats = info_hashes
+            .iter()
+            .map(|info_hash| {
+                if let Some(torrent) = read_locked_store.get(info_hash) {
+                    return torrent.downloaded;
+                } else {
+                    return 0;
+                }
+            })
+            .collect();
+        stats
+    }
+
+    async fn get_global_scrape_stats(&self) -> HashMap<InfoHash, usize> {
+        let read_locked_store = self.0.read().await;
+        let mut new_map = HashMap::new();
+
+        for (info_hash, torrent) in read_locked_store.iter() {
+            new_map.insert(info_hash.clone(), torrent.downloaded);
+        }
+
+        new_map
+    }
 }
 
 #[derive(Deserialize)]

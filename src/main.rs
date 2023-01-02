@@ -488,7 +488,7 @@ impl ToBencode for ScrapeResponse {
 
 async fn handle_announce(
     announce: Query<AnnounceRequest>,
-    State(mut swarm_store): State<SwarmStore>,
+    State(mut state): State<AppState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> impl IntoResponse {
     let announce: AnnounceRequest = announce.0;
@@ -512,15 +512,23 @@ async fn handle_announce(
 
         match event {
             Event::Started => {
-                swarm_store
+                state
+                    .swarm_store
                     .add_peer(info_hash.clone(), peer, is_download_complete)
                     .await;
             }
             Event::Stopped => {
-                swarm_store.remove_peer(info_hash.clone(), peer).await;
+                state.swarm_store.remove_peer(info_hash.clone(), peer).await;
             }
             Event::Completed => {
-                swarm_store.promote_peer(info_hash.clone(), peer).await;
+                state
+                    .swarm_store
+                    .promote_peer(info_hash.clone(), peer)
+                    .await;
+                state
+                    .torrent_store
+                    .increment_downloaded(info_hash.clone())
+                    .await;
             }
         }
     }
@@ -531,8 +539,11 @@ async fn handle_announce(
         30 // 30 peers is generally a good amount
     };
 
-    let (peers, peers6) = swarm_store.get_peers(info_hash.clone(), numwant).await;
-    let (complete, incomplete) = swarm_store.get_announce_stats(info_hash).await;
+    let (peers, peers6) = state
+        .swarm_store
+        .get_peers(info_hash.clone(), numwant)
+        .await;
+    let (complete, incomplete) = state.swarm_store.get_announce_stats(info_hash).await;
 
     let response = AnnounceResponse::Success {
         interval: 1800, // 30-minute announce interval
@@ -552,7 +563,10 @@ async fn handle_announce(
     )
 }
 
-async fn handle_scrape(scrape: Query<Vec<(String, String)>>) {
+async fn handle_scrape(
+    scrape: Query<Vec<(String, String)>>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
     let info_hashes: Option<Vec<InfoHash>> = if scrape.0.is_empty() {
         None
     } else {
@@ -574,17 +588,91 @@ async fn handle_scrape(scrape: Query<Vec<(String, String)>>) {
     };
 
     let scrape = ScrapeRequest { info_hashes };
+
+    let scrapes = match scrape.info_hashes {
+        Some(info_hashes) => {
+            let (seeder_stats, leecher_stats) = state
+                .swarm_store
+                .get_stats_for_scrapes(info_hashes.clone())
+                .await;
+            let downloaded_stats = state
+                .torrent_store
+                .get_stats_for_scrapes(info_hashes.clone())
+                .await;
+            downloaded_stats
+                .iter()
+                .enumerate()
+                .map(|(idx, downloaded)| {
+                    let data = ScrapeData {
+                        complete: seeder_stats[idx],
+                        incomplete: leecher_stats[idx],
+                        downloaded: *downloaded,
+                    };
+                    Scrape {
+                        info_hash: info_hashes[idx].clone(),
+                        data,
+                    }
+                })
+                .collect::<Vec<Scrape>>()
+        }
+        None => {
+            let seeder_leecher_map = state.swarm_store.get_global_scrape_stats().await;
+            let downloaded_map = state.torrent_store.get_global_scrape_stats().await;
+
+            downloaded_map
+                .into_iter()
+                .map(|(info_hash, downloaded)| {
+                    let (complete, incomplete) = match seeder_leecher_map.get(&info_hash) {
+                        Some((c, i)) => (*c, *i),
+                        None => (0, 0),
+                    };
+                    let data = ScrapeData {
+                        complete,
+                        incomplete,
+                        downloaded,
+                    };
+                    Scrape { info_hash, data }
+                })
+                .collect::<Vec<Scrape>>()
+        }
+    };
+
+    let response = ScrapeResponse { files: scrapes };
+
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "text/plain")],
+        response.to_bencode().unwrap(),
+    )
+}
+
+#[derive(Clone)]
+struct AppState {
+    swarm_store: SwarmStore,
+    torrent_store: TorrentStore,
 }
 
 #[tokio::main]
 async fn main() {
-    let swarm_store: SwarmStore = SwarmStore::new();
+    let mut state = AppState {
+        swarm_store: SwarmStore::new(),
+        torrent_store: TorrentStore::new(),
+    };
+
+    state
+        .torrent_store
+        .add_torrent("aaaaaaaaaaaaaaaaaaaa".as_bytes().to_vec())
+        .await;
+    state
+        .torrent_store
+        .add_torrent("bbbbbbbbbbbbbbbbbbbb".as_bytes().to_vec())
+        .await;
 
     let app = Router::new()
         .route("/announce", get(handle_announce))
         .route("/scrape", get(handle_scrape))
         .route("/", get(|| async { "Hello, World!" }))
-        .with_state(swarm_store);
+        .with_state(state);
 
     axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
         .serve(app.into_make_service_with_connect_info::<SocketAddr>())

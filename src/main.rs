@@ -229,6 +229,11 @@ struct AnnounceRequest {
     trackerid: Option<String>,
 }
 
+#[derive(Debug)]
+struct ScrapeRequest {
+    info_hashes: Option<Vec<InfoHash>>,
+}
+
 fn deserialize_url_encode<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
 where
     D: Deserializer<'de>,
@@ -399,12 +404,37 @@ async fn handle_announce(
     )
 }
 
+async fn handle_scrape(scrape: Query<Vec<(String, String)>>) {
+    let info_hashes: Option<Vec<InfoHash>> = if scrape.0.is_empty() {
+        None
+    } else {
+        let raw_info_hashes: Vec<&(String, String)> = scrape
+            .0
+            .iter()
+            .filter(|(key, _)| key.to_lowercase() == "info_hash")
+            .collect();
+        if raw_info_hashes.is_empty() {
+            None
+        } else {
+            let decoded_info_hashes = raw_info_hashes
+                .into_iter()
+                .map(|(_, raw_val)| urlencoding::decode_binary(raw_val.as_bytes()).into_owned())
+                .filter(|buf| buf.len() == 20)
+                .collect();
+            Some(decoded_info_hashes)
+        }
+    };
+
+    let scrape = ScrapeRequest { info_hashes };
+}
+
 #[tokio::main]
 async fn main() {
     let swarm_store: SwarmStore = SwarmStore::new();
 
     let app = Router::new()
         .route("/announce", get(handle_announce))
+        .route("/scrape", get(handle_scrape))
         .route("/", get(|| async { "Hello, World!" }))
         .with_state(swarm_store);
 

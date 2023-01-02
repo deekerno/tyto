@@ -163,9 +163,9 @@ impl SwarmStore {
         }
     }
 
-    async fn get_stats_for_scrapes(&self, info_hashes: Vec<InfoHash>) -> Vec<(usize, usize)> {
+    async fn get_stats_for_scrapes(&self, info_hashes: Vec<InfoHash>) -> (Vec<usize>, Vec<usize>) {
         let read_locked_store = self.0.read().await;
-        let stats = info_hashes
+        let (complete_vec, incomplete_vec) = info_hashes
             .iter()
             .map(|info_hash| {
                 if let Some(swarm) = read_locked_store.get(info_hash) {
@@ -174,22 +174,22 @@ impl SwarmStore {
                     return (0, 0);
                 }
             })
-            .collect();
-        stats
+            .unzip();
+        (complete_vec, incomplete_vec)
     }
 
     async fn get_global_scrape_stats(&self) -> HashMap<InfoHash, (usize, usize)> {
         let read_locked_store = self.0.read().await;
-        let mut new_map = HashMap::new();
+        let mut global_stats = HashMap::new();
 
         for (info_hash, swarm) in read_locked_store.iter() {
-            new_map.insert(
+            global_stats.insert(
                 info_hash.clone(),
                 (swarm.seeders.len(), swarm.leechers.len()),
             );
         }
 
-        new_map
+        global_stats
     }
 }
 
@@ -242,13 +242,13 @@ impl TorrentStore {
 
     async fn get_global_scrape_stats(&self) -> HashMap<InfoHash, usize> {
         let read_locked_store = self.0.read().await;
-        let mut new_map = HashMap::new();
+        let mut global_stats = HashMap::new();
 
         for (info_hash, torrent) in read_locked_store.iter() {
-            new_map.insert(info_hash.clone(), torrent.downloaded);
+            global_stats.insert(info_hash.clone(), torrent.downloaded);
         }
 
-        new_map
+        global_stats
     }
 }
 
@@ -421,6 +421,66 @@ impl ToBencode for AnnounceResponse {
                 })?;
             }
         }
+
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+struct ScrapeData {
+    complete: usize,
+    downloaded: usize,
+    incomplete: usize,
+}
+
+#[derive(Clone)]
+struct Scrape {
+    info_hash: InfoHash,
+    data: ScrapeData,
+}
+
+#[derive(Clone)]
+struct ScrapeResponse {
+    files: Vec<Scrape>,
+}
+
+impl ToBencode for ScrapeData {
+    const MAX_DEPTH: usize = 2;
+
+    fn encode(&self, encoder: SingleItemEncoder) -> Result<(), Error> {
+        encoder.emit_dict(|mut e| {
+            e.emit_pair(b"complete", self.complete)?;
+            e.emit_pair(b"downloaded", self.downloaded)?;
+            e.emit_pair(b"incomplete", self.incomplete)?;
+
+            Ok(())
+        })?;
+        Ok(())
+    }
+}
+
+impl ToBencode for Scrape {
+    const MAX_DEPTH: usize = 2;
+
+    fn encode(&self, encoder: SingleItemEncoder) -> Result<(), Error> {
+        encoder.emit_dict(|mut e| {
+            e.emit_pair(&self.info_hash, self.data.clone())?;
+
+            Ok(())
+        })?;
+        Ok(())
+    }
+}
+
+impl ToBencode for ScrapeResponse {
+    const MAX_DEPTH: usize = 5;
+
+    fn encode(&self, encoder: SingleItemEncoder) -> Result<(), Error> {
+        encoder.emit_dict(|mut e| {
+            e.emit_pair(b"files", self.files.clone())?;
+
+            Ok(())
+        })?;
 
         Ok(())
     }

@@ -157,9 +157,9 @@ impl SwarmStore {
     async fn get_announce_stats(&self, info_hash: InfoHash) -> (usize, usize) {
         let read_locked_store = self.0.read().await;
         if let Some(swarm) = read_locked_store.get(&info_hash) {
-            return (swarm.seeders.len(), swarm.leechers.len());
+            (swarm.seeders.len(), swarm.leechers.len())
         } else {
-            return (0, 0);
+            (0, 0)
         }
     }
 
@@ -169,9 +169,9 @@ impl SwarmStore {
             .iter()
             .map(|info_hash| {
                 if let Some(swarm) = read_locked_store.get(info_hash) {
-                    return (swarm.seeders.len(), swarm.leechers.len());
+                    (swarm.seeders.len(), swarm.leechers.len())
                 } else {
-                    return (0, 0);
+                    (0, 0)
                 }
             })
             .unzip();
@@ -231,9 +231,9 @@ impl TorrentStore {
             .iter()
             .map(|info_hash| {
                 if let Some(torrent) = read_locked_store.get(info_hash) {
-                    return torrent.downloaded;
+                    torrent.downloaded
                 } else {
-                    return 0;
+                    0
                 }
             })
             .collect();
@@ -294,9 +294,9 @@ impl Display for Event {
 #[derive(Deserialize)]
 struct AnnounceRequest {
     #[serde(default, deserialize_with = "deserialize_url_encode")]
-    info_hash: Vec<u8>,
+    info_hash: InfoHash,
     #[serde(default, deserialize_with = "deserialize_url_encode")]
-    peer_id: Vec<u8>,
+    peer_id: PeerId,
     port: u16,
     uploaded: u64,
     downloaded: u64,
@@ -329,11 +329,11 @@ where
     let buf: &[u8] = de::Deserialize::deserialize(deserializer)?;
     let decoded = urlencoding::decode_binary(buf).into_owned();
     if decoded.len() == 20 {
-        return Ok(decoded);
+        Ok(decoded)
     } else {
-        return Err(de::Error::custom(
+        Err(de::Error::custom(
             "URL-encoded parameters should be 20 bytes in length",
-        ));
+        ))
     }
 }
 
@@ -411,7 +411,6 @@ impl ToBencode for AnnounceResponse {
                     e.emit_pair(b"peers6", peers6)?;
 
                     e.emit_pair(b"tracker_id", tracker_id)?;
-
 
                     if let Some(warning_message) = warning_message {
                         e.emit_pair(b"warning_message", warning_message)?;
